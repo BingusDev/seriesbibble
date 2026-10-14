@@ -1,7 +1,9 @@
 const express = require('express');
 const path = require('path');
 const store = require('./store');
+const templates = require('./templates');
 const { toDocx, toPdf } = require('./export');
+const relationships = require('./relationships');
 const collab = require('./collab');
 
 const app = express();
@@ -27,6 +29,8 @@ app.use(collab.router);
 
 const str = (v, max = 500) => (typeof v === 'string' ? v.slice(0, max) : undefined);
 
+app.get('/api/templates', (req, res) => res.json(templates.TEMPLATES));
+
 app.get('/api/bibles', (req, res) => {
   const mine = store.list().filter((b) => collab.canAccess(req.user, b));
   res.json(mine.map((b) => collab.summaryFor(req.user, b)));
@@ -51,7 +55,7 @@ app.delete('/api/bibles/:id', (req, res) => {
 
 // Sections
 app.post('/api/bibles/:id/sections', withBible((req, res, bible) => {
-  const section = store.makeSection(str(req.body.name) || 'New Section');
+  const section = store.makeSection(str(req.body.name) || 'New Section', str(req.body.kind));
   bible.sections.push(section);
   store.write(bible);
   res.status(201).json(section);
@@ -61,6 +65,7 @@ app.patch('/api/bibles/:id/sections/:sid', withBible((req, res, bible) => {
   const section = bible.sections.find((s) => s.id === req.params.sid);
   if (!section) return res.status(404).json({ error: 'Section not found' });
   if (str(req.body.name)) section.name = str(req.body.name);
+  if (templates.isKind(req.body.kind)) section.kind = req.body.kind;
   if (Number.isInteger(req.body.position)) {
     bible.sections.splice(bible.sections.indexOf(section), 1);
     const pos = Math.max(0, Math.min(req.body.position, bible.sections.length));
@@ -72,6 +77,7 @@ app.patch('/api/bibles/:id/sections/:sid', withBible((req, res, bible) => {
 
 app.delete('/api/bibles/:id/sections/:sid', withBible((req, res, bible) => {
   bible.sections = bible.sections.filter((s) => s.id !== req.params.sid);
+  relationships.prune(bible);
   store.write(bible);
   res.status(204).end();
 }));
@@ -120,9 +126,13 @@ app.patch('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
 
 app.delete('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
   for (const s of bible.sections) s.pages = s.pages.filter((p) => p.id !== req.params.pid);
+  relationships.prune(bible);
   store.write(bible);
   res.status(204).end();
 }));
+
+// Character relationship map
+app.use(relationships.router);
 
 // Exports
 const fileName = (bible, ext) => `${(bible.title || 'series-bible').replace(/[^\w\- ]+/g, '').trim() || 'series-bible'}.${ext}`;

@@ -204,3 +204,30 @@ h1 .inline-edit, .inline-edit.big { font-family: var(--serif); font-size: 34px; 
 @media (max-width: 760px) { .account-btn span:not(.avatar) { display: none; } }
 @media print { .account { display: none; } }
 .bible-card .icon-btn.leave { font-size: 12px; padding: 4px 6px; }
+/* Section templates */
+.tmpl-modal { width: min(720px, 94vw); max-height: 86vh; }
+.tmpl-body { overflow-y: auto; padding: 0 16px 8px; }
+.tmpl-label { display: block; margin: 10px 0 6px; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.tmpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.tmpl-card { position: relative; display: block; border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; cursor: pointer; background: #fffefb; }
+.tmpl-card:hover { border-color: var(--accent); }
+.tmpl-card:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.tmpl-card input { position: absolute; opacity: 0; pointer-events: none; }
+.tmpl-card:has(input:focus-visible) { outline: 2px solid var(--link); outline-offset: 2px; }
+.tmpl-card strong { display: block; font-family: var(--serif); font-size: 15px; margin-bottom: 3px; }
+.tmpl-card strong small { font-family: var(--sans); font-weight: normal; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-left: 4px; }
+.tmpl-card span { display: block; color: var(--muted); font-size: 12px; }
+.tmpl-card em { display: block; margin-top: 6px; font-size: 11px; color: var(--muted); font-style: normal; line-height: 1.4; }
+.tmpl-name { display: block; width: 100%; margin: 0 0 6px; box-sizing: border-box; }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px 14px; border-top: 1px solid var(--line); }
+.tmpl-row { margin: 0 0 6px; color: var(--muted); font-size: 12px; }
+.tmpl-select { display: inline-flex; gap: 6px; align-items: center; }
+.tmpl-select select { font: inherit; padding: 2px 4px; border: 1px solid var(--line); border-radius: 4px; background: var(--paper); }
+.prompts { margin: 4px 0 10px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 4px; background: #fffcf6; font-size: 13px; }
+.prompts summary { cursor: pointer; padding: 7px 12px; color: var(--accent); font-weight: 600; font-size: 12px; }
+.prompts dl { margin: 0; padding: 0 12px 10px; display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; }
+.prompts dt a { font-family: var(--serif); font-weight: bold; color: var(--ink); text-decoration: none; }
+.prompts dt a:hover { color: var(--accent); }
+.prompts dd { margin: 0; color: var(--muted); }
+@media (max-width: 760px) { .prompts dl { grid-template-columns: 1fr; } .prompts dd { margin-bottom: 6px; } }
+@media print { .prompts { display: none !important; } }

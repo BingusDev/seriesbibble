@@ -85,3 +85,30 @@ test('word export is a valid docx with internal links', async () => {
   assert.match(doc, /w:bookmarkStart/);
   assert.doesNotMatch(doc, /\[\[BM:/);
 });
+
+test('templates are listed with a prompt for every heading', async () => {
+  const { status, body } = await call('GET', '/api/templates');
+  assert.strictEqual(status, 200);
+  const kinds = body.map((t) => t.kind);
+  for (const k of ['characters', 'world', 'episodes', 'themes', 'timeline', 'custom']) assert.ok(kinds.includes(k), k);
+  for (const t of body) for (const h of t.headings) assert.ok(h.title && h.prompt, `${t.kind}: ${h.title}`);
+});
+
+test('sections take a template, chosen or inferred from the name', async () => {
+  const { body: b } = await call('POST', '/api/bibles', { title: 'Templates' });
+  assert.deepStrictEqual(b.sections.map((s) => s.kind), ['characters', 'world']);
+  const { body: arcs } = await call('POST', `/api/bibles/${b.id}/sections`, { name: 'Big Ideas', kind: 'themes' });
+  assert.strictEqual(arcs.kind, 'themes');
+  const { body: eps } = await call('POST', `/api/bibles/${b.id}/sections`, { name: 'episodes' });
+  assert.strictEqual(eps.kind, 'episodes');
+  const { body: misc } = await call('POST', `/api/bibles/${b.id}/sections`, { name: 'Misc', kind: 'nonsense' });
+  assert.strictEqual(misc.kind, 'custom');
+  const { body: ep } = await call('POST', `/api/bibles/${b.id}/sections/${eps.id}/pages`, { title: 'Pilot' });
+  assert.match(ep.content, /<h2>Logline<\/h2>/);
+  assert.match(ep.content, /Setups &amp; Payoffs/);
+  const { body: blank } = await call('POST', `/api/bibles/${b.id}/sections/${misc.id}/pages`, { title: 'Notes' });
+  assert.strictEqual(blank.content, '<p><br></p>');
+  await call('PATCH', `/api/bibles/${b.id}/sections/${misc.id}`, { kind: 'timeline' });
+  const { body: tl } = await call('POST', `/api/bibles/${b.id}/sections/${misc.id}/pages`, { title: 'Year One' });
+  assert.match(tl.content, /Before the Series/);
+});
