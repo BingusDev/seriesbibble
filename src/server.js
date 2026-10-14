@@ -112,7 +112,7 @@ app.patch('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
   if (editsText && Number.isInteger(req.body.baseRev) && req.body.baseRev !== (page.rev || 0)) {
     return res.status(409).json({ error: 'This page was changed by someone else.', page });
   }
-  if (editsText) history.snapshot(bible.id, page, req.user.displayName || req.user.username);
+  if (editsText) history.snapshot(bible.id, page, req.user);
   if (str(req.body.title)) page.title = str(req.body.title);
   if (typeof req.body.content === 'string') page.content = req.body.content;
   if (req.body.sectionId && req.body.sectionId !== section.id) {
@@ -131,6 +131,7 @@ app.patch('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
   if (editsText) {
     page.rev = (page.rev || 0) + 1;
     page.updatedBy = req.user.displayName || req.user.username;
+    page.updatedById = req.user.id;
   }
   store.write(bible);
   res.json(page);

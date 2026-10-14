@@ -174,3 +174,30 @@ test('history and trash follow bible access rules', async () => {
   assert.strictEqual((await stranger('GET', `/api/bibles/${b.id}/pages/${page.id}/versions`)).status, 404);
   assert.strictEqual((await stranger('GET', `/api/bibles/${b.id}/trash`)).status, 404);
 });
+
+test('a relationship survives when both characters are deleted and restored one at a time', async () => {
+  const { b, sid, page } = await setup('Pair');
+  const { body: ben } = await call('POST', `/api/bibles/${b.id}/sections/${sid}/pages`, { title: 'Ben' });
+  await call('POST', `/api/bibles/${b.id}/relationships`, { from: page.id, to: ben.id, label: 'Siblings', type: 'family' });
+  await call('DELETE', `/api/bibles/${b.id}/pages/${page.id}`);
+  await call('DELETE', `/api/bibles/${b.id}/pages/${ben.id}`);
+  await call('POST', `/api/bibles/${b.id}/trash/${page.id}/restore`);
+  await call('POST', `/api/bibles/${b.id}/trash/${ben.id}/restore`);
+  const { body: full } = await call('GET', `/api/bibles/${b.id}`);
+  assert.deepStrictEqual(full.relmap.relationships.map((r) => r.label), ['Siblings']);
+});
+
+test('two people with the same display name still count as a handoff', async () => {
+  const { b, page } = await setup('Namesakes');
+  await call('POST', `/api/bibles/${b.id}/sharing`, { username: 'partner' });
+  // Give both accounts the same display name.
+  const users = path.join(process.env.DATA_DIR, 'users.json');
+  const data = JSON.parse(fs.readFileSync(users, 'utf8'));
+  for (const u of data) u.displayName = 'Sam';
+  fs.writeFileSync(users, JSON.stringify(data));
+  const url = `/api/bibles/${b.id}/pages/${page.id}`;
+  await call('PATCH', url, { content: '<p>Mine</p>' });
+  await as('partner')('PATCH', url, { content: '<p>Theirs</p>' });
+  const { body: versions } = await call('GET', `${url}/versions`);
+  assert.strictEqual(versions.length, 2);
+});

@@ -53,12 +53,15 @@ function saveVersions(bid, pid, versions) {
 
 // Keeps the page as it is now (before an edit) as a version, unless a recent one already covers it.
 // `force` keeps it regardless of age, as long as it differs from the newest version.
+// Display names are not unique, so a handoff between people is judged by account id.
 function snapshot(bid, page, editor, force = false) {
   const versions = versionsOf(bid, page.id);
   const last = versions[versions.length - 1];
   if (last && last.content === page.content && last.title === page.title) return null;
   const takenAt = last ? Date.parse(last.takenAt || last.at) : 0;
-  const due = !last || force || Date.now() - takenAt >= INTERVAL_MS || (editor && page.updatedBy && page.updatedBy !== editor);
+  const lastEditor = page.updatedById || page.updatedBy;
+  const handoff = !!editor && !!lastEditor && lastEditor !== (page.updatedById ? editor.id : editor.displayName || editor.username);
+  const due = !last || force || Date.now() - takenAt >= INTERVAL_MS || handoff;
   if (!due) return null;
   const version = {
     id: store.newId(),
@@ -150,7 +153,17 @@ function restorePage(bible, pid) {
   const map = relationships.prune(bible);
   const present = new Set(map.relationships.map((r) => r.id));
   for (const rel of entry.relationships || []) {
-    if (!present.has(rel.id) && store.findPage(bible, rel.from) && store.findPage(bible, rel.to)) map.relationships.push(rel);
+    if (present.has(rel.id)) continue;
+    if (store.findPage(bible, rel.from) && store.findPage(bible, rel.to)) {
+      map.relationships.push(rel);
+      continue;
+    }
+    // The other character is still in the trash: hand the relationship to its entry
+    // so restoring that page brings it back.
+    const other = entries.find((e) => e !== entry && (e.page.id === rel.from || e.page.id === rel.to));
+    if (other && !(other.relationships || []).some((r) => r.id === rel.id)) {
+      other.relationships = (other.relationships || []).concat(rel);
+    }
   }
   if (entry.mapPosition && !map.positions[pid]) map.positions[pid] = entry.mapPosition;
   saveTrash(bible.id, entries.filter((e) => e !== entry));
@@ -220,6 +233,7 @@ router.post('/api/bibles/:id/pages/:pid/versions/:vid/restore', withBible((req, 
   page.updatedAt = store.now();
   page.rev = (page.rev || 0) + 1;
   page.updatedBy = req.user.displayName || req.user.username;
+  page.updatedById = req.user.id;
   store.write(bible);
   res.json(page);
 }));
