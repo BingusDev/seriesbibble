@@ -93,6 +93,7 @@ function trashOf(bid) {
   if (keep.length !== all.length) {
     for (const e of all) if (!keep.includes(e)) dropHistory(bid, e.page.id);
     writeJson(f, keep);
+    sweepImages(bid);
   }
   return keep;
 }
@@ -170,11 +171,21 @@ function restorePage(bible, pid) {
   return { page: entry.page, sectionId: section.id };
 }
 
+// Pictures only the purged pages used go with them. Loaded late: images.js reads the trash too.
+function sweepImages(bid) {
+  try {
+    require('./images').sweep(bid);
+  } catch (err) {
+    console.error('Image clean-up failed', err);
+  }
+}
+
 function purge(bid, pid) {
   const entries = trashOf(bid);
   const gone = pid ? entries.filter((e) => e.page.id === pid) : entries;
   for (const e of gone) dropHistory(bid, e.page.id);
   saveTrash(bid, entries.filter((e) => !gone.includes(e)));
+  if (gone.length) sweepImages(bid);
   return gone.length;
 }
 

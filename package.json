@@ -17,7 +17,8 @@
     "html-to-docx": "^1.8.0",
     "jszip": "^3.10.2",
     "puppeteer-core": "^25.13.0",
-    "quill": "^2.0.3"
+    "quill": "^2.0.3",
+    "sharp": "^0.34.5"
   },
   "private": true
 }
