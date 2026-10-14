@@ -308,8 +308,11 @@ async function toDocx(bible) {
   let html = buildHtml(bible, { forWord: true, assets: await loadAssets(bible, { forWord: true }) });
   html = html.replace(/<(h[1-6])([^>]*?)\sid="([^"]+)"([^>]*)>/g, (_, tag, a, id, b) => `<${tag}${a}${b}>${MARK(id)}`);
   html = html.replace(/<div class="title-page">/, '<div class="title-page" style="text-align:center">');
-  html = html.replace(/<div class="toc">/, '<div class="toc" style="page-break-before:always">');
-  html = html.replace(/<h1 class="section-title"/g, '<h1 class="section-title" style="page-break-before:always"');
+  // html-to-docx ignores page-break-before, but turns a top-level <div class="page-break"> into a
+  // real Word page break, so one goes before the contents and before every section.
+  const BREAK = '<div class="page-break"></div>';
+  html = html.replace(/<div class="toc">/, `${BREAK}<div class="toc">`);
+  html = html.replace(/<h1 class="section-title"/g, `${BREAK}<h1 class="section-title"`);
 
   const buf = await HTMLtoDOCX(html, null, {
     title: bible.title,

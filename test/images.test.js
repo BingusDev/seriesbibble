@@ -171,6 +171,12 @@ test('exports carry page pictures, lead pictures and the relationship map', asyn
   assert.ok(media.length >= 3, `Word gets the picture, the lead picture and the map (got ${media.join(', ')})`);
   const doc = await zip.file('word/document.xml').async('string');
   assert.match(doc, /mentor of/);
+
+  // Contents, every section and the Relationships chapter each start on a new page.
+  const breaks = doc.split('<w:br w:type="page"/>');
+  assert.strictEqual(breaks.length - 1, bible.sections.length + 2);
+  const after = breaks.slice(1).map((part) => (part.match(/<w:t[^>]*>([^<]+)<\/w:t>/) || [])[1]);
+  assert.deepStrictEqual(after, ['Contents', ...bible.sections.map((s) => s.name), 'Relationships']);
 });
 
 test('a bible with no relationships has no relationship chapter', async () => {
