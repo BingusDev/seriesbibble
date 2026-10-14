@@ -1089,7 +1089,9 @@
     const known = state.sig;
     state.sig = act.sig;
     const changed = b.sections.some((s) => s.pages.some((p) => act.pages[p.id] && act.pages[p.id].rev !== (p.rev || 0)));
-    if (changed || (known && known !== act.sig)) await refreshBible().catch(() => {});
+    // The first poll has nothing to compare with, so it re-reads once to catch changes made
+    // between opening the bible and now.
+    if (changed || known !== act.sig) await refreshBible().catch(() => {});
   }
   setInterval(poll, 4000);
   document.addEventListener('visibilitychange', poll);
