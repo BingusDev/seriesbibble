@@ -5,6 +5,7 @@ const templates = require('./templates');
 const { toDocx, toPdf } = require('./export');
 const relationships = require('./relationships');
 const collab = require('./collab');
+const history = require('./history');
 
 const app = express();
 // Only proxies named in TRUST_PROXY may set X-Forwarded-For/-Proto (Express syntax,
@@ -56,6 +57,7 @@ app.patch('/api/bibles/:id', withBible((req, res, bible) => {
 
 app.delete('/api/bibles/:id', (req, res) => {
   store.remove(req.params.id);
+  history.removeBible(req.params.id);
   res.status(204).end();
 });
 
@@ -82,6 +84,9 @@ app.patch('/api/bibles/:id/sections/:sid', withBible((req, res, bible) => {
 }));
 
 app.delete('/api/bibles/:id/sections/:sid', withBible((req, res, bible) => {
+  const section = bible.sections.find((s) => s.id === req.params.sid);
+  // Its pages go to the trash, where restoring one brings the section back too.
+  if (section) history.trashPages(bible, section.pages.map((p) => p.id), req.user);
   bible.sections = bible.sections.filter((s) => s.id !== req.params.sid);
   relationships.prune(bible);
   store.write(bible);
@@ -107,6 +112,7 @@ app.patch('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
   if (editsText && Number.isInteger(req.body.baseRev) && req.body.baseRev !== (page.rev || 0)) {
     return res.status(409).json({ error: 'This page was changed by someone else.', page });
   }
+  if (editsText) history.snapshot(bible.id, page, req.user.displayName || req.user.username);
   if (str(req.body.title)) page.title = str(req.body.title);
   if (typeof req.body.content === 'string') page.content = req.body.content;
   if (req.body.sectionId && req.body.sectionId !== section.id) {
@@ -131,14 +137,16 @@ app.patch('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
 }));
 
 app.delete('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
-  for (const s of bible.sections) s.pages = s.pages.filter((p) => p.id !== req.params.pid);
-  relationships.prune(bible);
+  history.trashPages(bible, [req.params.pid], req.user);
   store.write(bible);
   res.status(204).end();
 }));
 
 // Character relationship map
 app.use(relationships.router);
+
+// Page history and the trash
+app.use(history.router);
 
 // Exports
 const fileName = (bible, ext) => `${(bible.title || 'series-bible').replace(/[^\w\- ]+/g, '').trim() || 'series-bible'}.${ext}`;
