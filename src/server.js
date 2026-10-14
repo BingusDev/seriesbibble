@@ -16,6 +16,10 @@ app.use(express.json({ limit: '25mb' }));
 const pub = path.join(__dirname, '..', 'public');
 app.use(express.static(pub));
 app.use('/vendor/quill', express.static(path.join(__dirname, '..', 'node_modules', 'quill', 'dist')));
+// Self-hosted fonts, so the app looks the same offline and on a private network.
+for (const pkg of ['@fontsource-variable/literata', '@fontsource-variable/inter', '@fontsource/courier-prime']) {
+  app.use('/vendor/' + pkg.split('/')[1], express.static(path.join(__dirname, '..', 'node_modules', pkg)));
+}
 
 // Loads the bible named in the URL or answers 404.
 function withBible(handler) {

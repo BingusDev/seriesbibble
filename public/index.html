@@ -4,6 +4,16 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Series Bible</title>
+  <meta name="theme-color" content="#f7f3ea">
+  <script>
+    // Apply the saved or system theme before first paint so night draft never flashes white.
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem('sb-theme'); } catch (e) {}
+      var dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    })();
+  </script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%238a2c1d'/%3E%3Ctext x='16' y='23' font-family='Georgia' font-size='20' font-weight='bold' fill='white' text-anchor='middle'%3E§%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="/vendor/quill/quill.snow.css">
   <link rel="stylesheet" href="/css/app.css">
@@ -11,9 +21,10 @@
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="#/">Series Bible</a>
+    <a class="brand" href="#/"><span class="brand-mark" aria-hidden="true">§</span><span class="brand-text">Series Bible</span></a>
     <nav class="crumbs" id="crumbs"></nav>
     <div class="topbar-actions" id="topbar-actions"></div>
+    <button class="icon-btn theme-btn" id="theme-btn" type="button"></button>
     <div class="account" id="account"></div>
   </header>
 

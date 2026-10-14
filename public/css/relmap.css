@@ -1,11 +1,8 @@
-/* Relationship map */
-.side-map { display: block; margin-top: 8px; padding: 6px 8px; border-radius: 6px; color: var(--ink); text-decoration: none; font-weight: 600; }
-.side-map:hover { background: var(--sel); }
-.side-map.active { background: var(--accent-soft); color: var(--accent); }
+/* Relationship map (the sidebar link is styled in app.css) */
 
 .relmap { max-width: 1200px; margin: 0 auto; padding: 24px 24px 80px; }
 .rm-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-.rm-head h1 { font-family: var(--serif); font-size: 30px; margin: 2px 0 4px; }
+.rm-head h1 { font-family: var(--serif); font-weight: 650; font-size: 36px; letter-spacing: -.01em; margin: 6px 0 4px; }
 .rm-sub { margin: 0; color: var(--muted); }
 .rm-tools { display: flex; gap: 8px; flex-wrap: wrap; }
 
@@ -23,8 +20,8 @@
 #rm-svg.grabbing { cursor: grabbing; }
 .rm-node { cursor: pointer; }
 .rm-node circle { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2; transition: fill .15s; }
-.rm-node.other circle { fill: #eeece6; stroke: var(--muted); stroke-dasharray: 4 3; }
-.rm-node:hover circle, .rm-node:focus circle { fill: #fff; stroke-width: 3; }
+.rm-node.other circle { fill: var(--sel); stroke: var(--muted); stroke-dasharray: 4 3; }
+.rm-node:hover circle, .rm-node:focus circle { fill: var(--paper); stroke-width: 3; }
 .rm-node:focus { outline: none; }
 .rm-initials { text-anchor: middle; font-family: var(--serif); font-weight: bold; font-size: 15px; fill: var(--accent); pointer-events: none; }
 .rm-node.other .rm-initials { fill: var(--muted); }
@@ -41,7 +38,7 @@
 
 .rm-empty { background: var(--paper); border: 1px dashed var(--line); border-radius: 8px; padding: 40px; text-align: center; color: var(--muted); }
 
-.rm-list-title { font-family: var(--serif); font-size: 20px; margin: 28px 0 8px; }
+.rm-list-title { font-family: var(--serif); font-weight: 650; font-size: 22px; margin: 28px 0 8px; }
 .rm-list-title small { font-family: var(--sans); font-size: 12px; color: var(--muted); font-weight: normal; }
 .rm-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; }
 .rm-list li.none { color: var(--muted); font-style: italic; }
@@ -60,12 +57,12 @@
 .rm-panel-actions a { color: var(--link); }
 
 /* Add / edit dialog */
-.rm-dialog { width: min(640px, calc(100vw - 32px)); border: 0; border-radius: 10px; padding: 0; box-shadow: 0 10px 40px rgba(0,0,0,.25); color: var(--ink); background: var(--paper); }
-.rm-dialog::backdrop { background: rgba(20, 18, 15, .35); }
+.rm-dialog { width: min(640px, calc(100vw - 32px)); border: 0; border-radius: 10px; padding: 0; box-shadow: var(--shadow-pop); color: var(--ink); background: var(--paper); }
+.rm-dialog::backdrop { background: var(--scrim, rgba(28, 22, 14, .38)); }
 .rm-dialog form { padding: 18px 20px 16px; display: flex; flex-direction: column; gap: 12px; }
-.rm-dialog h2 { margin: 0; font-size: 17px; }
+.rm-dialog h2 { margin: 0; font-family: var(--serif); font-weight: 650; font-size: 19px; }
 .rm-dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 600; }
-.rm-dialog select, .rm-dialog input[type="text"], .rm-dialog input:not([type]), .rm-dialog textarea { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; background: #fff; font-size: 14px; color: var(--ink); font-weight: normal; }
+.rm-dialog select, .rm-dialog input[type="text"], .rm-dialog input:not([type]), .rm-dialog textarea { padding: 7px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); font-size: 14px; color: var(--ink); font-weight: normal; }
 .rm-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .rm-row select, .rm-row input { width: 100%; min-width: 0; }
 .rm-types { border: 0; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 6px; }
@@ -76,7 +73,7 @@
 .rm-types .rm-chip:has(input:checked) { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); font-weight: 600; }
 .rm-types .rm-chip:has(input:focus-visible) { outline: 2px solid var(--c); }
 .rm-dialog .rm-check { flex-direction: row; align-items: center; gap: 8px; font-weight: normal; color: var(--ink); font-size: 13px; }
-.rm-error { color: #a01b1b; margin: 0; }
+.rm-error { color: var(--danger); margin: 0; }
 .rm-actions { display: flex; gap: 8px; align-items: center; }
 .rm-actions span { flex: 1; }
 

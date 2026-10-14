@@ -4,12 +4,12 @@
   'use strict';
 
   const TYPES = [
-    { key: 'family', label: 'Family', color: '#2f7d4f' },
-    { key: 'romance', label: 'Romance', color: '#c2185b' },
-    { key: 'ally', label: 'Friend / ally', color: '#1a4fa0' },
-    { key: 'rival', label: 'Rival / enemy', color: '#c0392b', dash: '7 5' },
-    { key: 'work', label: 'Work', color: '#7a5c99' },
-    { key: 'other', label: 'Other', color: '#6b675f' },
+    { key: 'family', label: 'Family', color: 'var(--rel-family)' },
+    { key: 'romance', label: 'Romance', color: 'var(--rel-romance)' },
+    { key: 'ally', label: 'Friend / ally', color: 'var(--rel-ally)' },
+    { key: 'rival', label: 'Rival / enemy', color: 'var(--rel-rival)', dash: '7 5' },
+    { key: 'work', label: 'Work', color: 'var(--rel-work)' },
+    { key: 'other', label: 'Other', color: 'var(--rel-other)' },
   ];
   const typeOf = (k) => TYPES.find((t) => t.key === k) || TYPES[TYPES.length - 1];
   const SUGGESTIONS = [
@@ -300,7 +300,7 @@
       });
     }
 
-    const markers = TYPES.map((t) => `<marker id="rm-end-${t.key}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="${t.color}"/></marker>`).join('');
+    const markers = TYPES.map((t) => `<marker id="rm-end-${t.key}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:${t.color}"/></marker>`).join('');
     svg.innerHTML = `<defs>${markers}</defs><g class="rm-view"><g class="rm-edges"></g><g class="rm-nodes"></g></g>`;
     const edgesG = svg.querySelector('.rm-edges');
     const nodesG = svg.querySelector('.rm-nodes');
@@ -314,9 +314,9 @@
           const w = Math.min(text.length, 28) * 6.4 + 12;
           return `<g class="rm-edge" data-rel="${r.id}" data-a="${r.from}" data-b="${r.to}" tabindex="0" role="button" aria-label="${esc(pages.get(r.from).page.title)} ${text} ${esc(pages.get(r.to).page.title)}">
             <path class="rm-hit" d="${g.d}"/>
-            <path class="rm-line" d="${g.d}" stroke="${t.color}" ${t.dash ? `stroke-dasharray="${t.dash}"` : ''} ${r.mutual ? '' : `marker-end="url(#rm-end-${t.key})"`}/>
-            <rect x="${(g.mid.x - w / 2).toFixed(1)}" y="${(g.mid.y - 10).toFixed(1)}" width="${w.toFixed(1)}" height="20" rx="10" stroke="${t.color}"/>
-            <text x="${g.mid.x.toFixed(1)}" y="${(g.mid.y + 4).toFixed(1)}" fill="${t.color}">${text.length > 28 ? text.slice(0, 27) + '…' : text}</text>
+            <path class="rm-line" d="${g.d}" style="stroke:${t.color}" ${t.dash ? `stroke-dasharray="${t.dash}"` : ''} ${r.mutual ? '' : `marker-end="url(#rm-end-${t.key})"`}/>
+            <rect x="${(g.mid.x - w / 2).toFixed(1)}" y="${(g.mid.y - 10).toFixed(1)}" width="${w.toFixed(1)}" height="20" rx="10" style="stroke:${t.color}"/>
+            <text x="${g.mid.x.toFixed(1)}" y="${(g.mid.y + 4).toFixed(1)}" style="fill:${t.color}">${text.length > 28 ? text.slice(0, 27) + '…' : text}</text>
           </g>`;
         })
         .join('');

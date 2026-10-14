@@ -95,6 +95,12 @@
       })
       .filter((h) => h.text);
   }
+  // Each section gets a binder-tab colour by its place in the bible, so neighbours never share one.
+  function tab(section) {
+    const i = Math.max(0, state.bible.sections.indexOf(section));
+    return `--tab: var(--tab-${i % 8})`;
+  }
+
   function excerpt(html, n = 160) {
     const doc = new DOMParser().parseFromString(html || '', 'text/html');
     $$('h1, h2, h3', doc.body).forEach((h) => h.remove());
@@ -233,6 +239,34 @@
   }
   window.addEventListener('hashchange', route);
 
+  // ---------- Theme (paper or night draft) ----------
+  // index.html sets the starting theme before paint; this keeps the toggle and the system setting in sync.
+  const ICONS = {
+    moon: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
+    sun: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>',
+  };
+  const themeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#1c1915' : '#f7f3ea';
+    const btn = $('#theme-btn');
+    const next = theme === 'dark' ? 'paper' : 'night draft';
+    btn.innerHTML = theme === 'dark' ? ICONS.sun : ICONS.moon;
+    btn.title = `Switch to ${next}`;
+    btn.setAttribute('aria-label', `Switch to ${next}`);
+  }
+  applyTheme(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light');
+  $('#theme-btn').onclick = () => {
+    const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem('sb-theme', theme); } catch {}
+    applyTheme(theme);
+  };
+  themeQuery.addEventListener('change', (e) => {
+    let saved = null;
+    try { saved = localStorage.getItem('sb-theme'); } catch {}
+    if (!saved) applyTheme(e.matches ? 'dark' : 'light');
+  });
+
   // ---------- Top bar ----------
   function renderCrumbs() {
     const r = state.route;
@@ -262,9 +296,9 @@
     }
     const id = state.bible.id;
     els.actions.innerHTML = `
-      <button class="btn small side-toggle" id="side-toggle">☰ Sections</button>
+      <button class="btn side-toggle" id="side-toggle" aria-label="Sections">☰<span class="lbl"> Sections</span></button>
       <span class="save-state" id="save-state"></span>
-      <button class="btn" id="jump-btn" title="Jump to (Ctrl+K)">Jump to…</button>
+      <button class="btn" id="jump-btn" title="Jump to (Ctrl+K)" aria-label="Jump to"><svg class="btn-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.5-4.5"/></svg><span class="lbl">Jump to…</span><kbd>${/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl K"}</kbd></button>
       <button class="btn" id="share-btn" title="Share this bible with other people">Share</button>
       <div class="menu">
         <button class="btn primary" id="export-btn">Export ▾</button>
@@ -339,13 +373,13 @@
             .map(
               (b) => `
             <div class="bible-card">
-              <a href="${link.bible(b.id)}"><h3>${esc(b.title)}</h3>
+              <a href="${link.bible(b.id)}"><span class="tp-kicker">Series Bible</span><h3>${esc(b.title)}</h3>
               ${b.logline ? `<p>${esc(b.logline)}</p>` : ''}
-              <small>Edited ${new Date(b.updatedAt).toLocaleString()}${
+              <small><span>${
                 b.role === 'owner'
-                  ? b.collaboratorCount ? ` · shared with ${b.collaboratorCount} ${b.collaboratorCount === 1 ? 'person' : 'people'}` : ''
-                  : ` · shared by ${esc(b.owner ? b.owner.displayName : 'someone')}`
-              }</small></a>
+                  ? b.collaboratorCount ? `Shared with ${b.collaboratorCount} ${b.collaboratorCount === 1 ? 'person' : 'people'}` : ''
+                  : `Shared by ${esc(b.owner ? b.owner.displayName : 'someone')}`
+              }</span><span title="${esc(new Date(b.updatedAt).toLocaleString())}">Edited ${new Date(b.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span></small></a>
               ${
                 b.role === 'owner'
                   ? `<button class="icon-btn" data-delete="${b.id}" data-title="${esc(b.title)}" title="Delete">🗑</button>`
@@ -387,7 +421,7 @@
     els.sidebar.hidden = false;
     els.sidebar.innerHTML = `
       <div class="side-head">
-        <a class="side-title" href="${link.bible(b.id)}">${esc(b.title)}</a>
+        <a class="side-title" href="${link.bible(b.id)}"><small>Series Bible</small><span>${esc(b.title)}</span></a>
         <input class="side-filter" id="side-filter" type="search" placeholder="Filter pages…" value="${esc(state.filter)}">
         <a class="side-map ${r.name === 'map' ? 'active' : ''}" href="${link.map(b.id)}">◎ Relationship map</a>
       </div>
@@ -396,9 +430,9 @@
           const pages = q ? s.pages.filter((p) => p.title.toLowerCase().includes(q)) : s.pages;
           const collapsed = state.collapsed[s.id] && !q;
           return `
-        <div class="section ${s.id === activeSection ? 'active' : ''} ${collapsed ? 'collapsed' : ''}" data-sid="${s.id}">
+        <div class="section ${s.id === activeSection ? 'active' : ''} ${collapsed ? 'collapsed' : ''}" data-sid="${s.id}" style="${tab(s)}">
           <div class="section-head">
-            <button class="icon-btn twisty" data-toggle="${s.id}" aria-label="Collapse">${collapsed ? '▶' : '▼'}</button>
+            <button class="icon-btn twisty" data-toggle="${s.id}" aria-label="Collapse">${collapsed ? '▶' : '▼'}</button><span class="tab"></span>
             <a href="${link.section(b.id, s.id)}" title="${esc(s.name)}">${esc(s.name)}</a>
             <span class="count">${s.pages.length}</span>
             <button class="icon-btn" data-add-page="${s.id}" title="Add page to ${esc(s.name)}">＋</button>
@@ -591,7 +625,7 @@
         ${b.sections
           .map(
             (s) => `
-          <div class="section-block">
+          <div class="section-block" style="${tab(s)}">
             <h2><a href="${link.section(b.id, s.id)}">${esc(s.name)}</a><span class="count">${s.pages.length} ${s.pages.length === 1 ? 'page' : 'pages'}</span></h2>
             <div class="cards">
               ${s.pages
@@ -610,7 +644,7 @@
       const updated = await api('PATCH', `/api/bibles/${b.id}`, { title: t, logline: $('#bible-logline').value });
       b.title = updated.title;
       b.logline = updated.logline;
-      $('.side-title').textContent = b.title;
+      $('.side-title span').textContent = b.title;
       renderCrumbs();
     }, 600);
     $('#bible-title').oninput = saveMeta;
@@ -630,7 +664,7 @@
     }
     document.title = `${s.name} · ${b.title}`;
     els.main.innerHTML = `
-      <div class="sheet overview">
+      <div class="sheet overview" style="${tab(s)}">
         <a class="eyebrow" href="${link.bible(b.id)}">${esc(b.title)}</a>
         <h1><input class="inline-edit" id="section-name" value="${esc(s.name)}" maxlength="200" aria-label="Section name"></h1>
         <div class="page-meta"><span>${s.pages.length} ${s.pages.length === 1 ? 'page' : 'pages'} · drag pages in the sidebar to reorder</span>
@@ -708,7 +742,7 @@
     const tmpl = templateFor(section.kind);
     document.title = `${page.title} · ${b.title}`;
     els.main.innerHTML = `
-      <div class="sheet editor-wrap">
+      <div class="sheet editor-wrap" style="${tab(section)}">
         <a class="eyebrow" href="${link.section(b.id, section.id)}">${esc(section.name)}</a>
         <input class="page-title-input" id="page-title" value="${esc(page.title)}" maxlength="200" aria-label="Page title">
         <div class="page-meta">
