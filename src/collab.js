@@ -50,13 +50,13 @@ router.post('/api/auth/register', (req, res) => {
 });
 
 router.post('/api/auth/login', (req, res) => {
-  if (auth.tooManyFailures(req.ip)) {
+  const { username, password } = body(req);
+  if (auth.tooManyFailures(req.ip, username)) {
     return res.status(429).json({ error: 'Too many failed sign-ins. Try again in a few minutes.' });
   }
-  const { username, password } = body(req);
   const user = auth.findByName(username);
   if (!user || typeof password !== 'string' || !auth.checkPassword(user, password)) {
-    auth.noteFailure(req.ip);
+    auth.noteFailure(req.ip, username);
     return res.status(401).json({ error: 'Wrong username or password.' });
   }
   auth.setCookie(req, res, auth.startSession(user));

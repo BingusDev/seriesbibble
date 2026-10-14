@@ -134,3 +134,17 @@ test('changing a password ends old sessions', async () => {
   assert.strictEqual((await other('GET', '/api/bibles')).status, 401);
   assert.strictEqual((await cat('GET', '/api/bibles')).status, 200, 'the device that changed it stays signed in');
 });
+
+test('repeated wrong passwords lock that username for a while, whatever address is claimed', async () => {
+  const guess = client();
+  for (let i = 0; i < 10; i++) {
+    const res = await fetch(`${base}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `10.0.0.${i}` },
+      body: JSON.stringify({ username: 'ben', password: `guess-${i}` }),
+    });
+    assert.strictEqual(res.status, 401);
+  }
+  assert.strictEqual((await guess('POST', '/api/auth/login', { username: 'ben', password: 'ben-password' })).status, 429);
+  assert.strictEqual((await guess('POST', '/api/auth/login', { username: 'ana', password: 'ana-password' })).status, 200);
+});

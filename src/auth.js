@@ -148,17 +148,23 @@ function setCookie(req, res, token) {
   res.append('Set-Cookie', bits.join('; '));
 }
 
-// Slows down password guessing: 10 failed logins per address per 15 minutes.
+// Slows down password guessing, per 15 minutes: 10 failed logins for one username
+// (so a faked client address does not help) and 50 from one address.
 const failures = new Map();
-function tooManyFailures(ip) {
-  const f = failures.get(ip);
-  if (!f || f.until < Date.now()) return false;
-  return f.count >= 10;
+const LIMITS = { user: 10, ip: 50 };
+const keysFor = (ip, username) => [['ip', `ip:${ip}`], ['user', `user:${normalize(username)}`]];
+function tooManyFailures(ip, username) {
+  return keysFor(ip, username).some(([kind, key]) => {
+    const f = failures.get(key);
+    return f && f.until > Date.now() && f.count >= LIMITS[kind];
+  });
 }
-function noteFailure(ip) {
-  const f = failures.get(ip);
-  if (!f || f.until < Date.now()) failures.set(ip, { count: 1, until: Date.now() + 15 * 60e3 });
-  else f.count += 1;
+function noteFailure(ip, username) {
+  for (const [, key] of keysFor(ip, username)) {
+    const f = failures.get(key);
+    if (!f || f.until < Date.now()) failures.set(key, { count: 1, until: Date.now() + 15 * 60e3 });
+    else f.count += 1;
+  }
 }
 
 const resetFailures = () => failures.clear();

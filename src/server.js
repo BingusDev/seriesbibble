@@ -7,8 +7,10 @@ const relationships = require('./relationships');
 const collab = require('./collab');
 
 const app = express();
-// Caddy (or another proxy on this machine or network) terminates HTTPS.
-app.set('trust proxy', 'loopback, linklocal, uniquelocal');
+// Only proxies named in TRUST_PROXY may set X-Forwarded-For/-Proto (Express syntax,
+// e.g. "loopback" or "172.17.0.1"). Trusting every private address would let LAN
+// clients that reach the app directly fake their address.
+app.set('trust proxy', process.env.TRUST_PROXY || 'loopback');
 app.use(express.json({ limit: '25mb' }));
 
 const pub = path.join(__dirname, '..', 'public');

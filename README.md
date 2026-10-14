@@ -42,7 +42,7 @@ docker compose exec series-bible node src/users-cli.js add <username> <password>
 docker compose exec series-bible node src/users-cli.js reset-password <username> <new password>
 ```
 
-Behind a reverse proxy that terminates HTTPS (Caddy, nginx), the sign-in cookie is marked Secure automatically when the proxy sends `X-Forwarded-Proto: https`.
+Behind a reverse proxy that terminates HTTPS (Caddy, nginx), the sign-in cookie is marked Secure when the proxy sends `X-Forwarded-Proto: https` and its address is listed in `TRUST_PROXY`.
 
 ## Run without Docker
 
@@ -60,6 +60,7 @@ PDF export needs Chromium or Chrome installed; set `CHROMIUM_PATH` if it is not 
 | `PORT` | `3000` | HTTP port |
 | `DATA_DIR` | `./data` (`/data` in Docker) | Where bibles are stored |
 | `CHROMIUM_PATH` | auto-detected | Browser used for PDF export |
+| `TRUST_PROXY` | `loopback` | Reverse proxy addresses allowed to set `X-Forwarded-*` headers ([Express syntax](https://expressjs.com/en/guide/behind-proxies.html)), e.g. the Docker gateway `172.17.0.1` when Caddy runs on the host |
 | `ALLOW_SIGNUP` | `true` | Set to `false` so only the first account can be created from the sign-in screen |
 
 ## Tests

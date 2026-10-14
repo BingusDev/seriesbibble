@@ -976,8 +976,13 @@
     state.quill.setContents([], 'silent');
     state.quill.clipboard.dangerouslyPasteHTML(page.content || '', 'silent');
     if (sel) state.quill.setSelection(Math.min(sel.index, state.quill.getLength() - 1), 0, 'silent');
+    // Always show their title, even mid-focus, or typing would save over their rename.
     const title = $('#page-title');
-    if (title && document.activeElement !== title) title.value = page.title;
+    if (title && title.value !== page.title) {
+      const caret = title.selectionStart;
+      title.value = page.title;
+      if (document.activeElement === title) title.setSelectionRange(caret, caret);
+    }
     const last = $('#last-edit');
     if (last) last.textContent = page.updatedBy ? `Last edited by ${page.updatedBy}` : '';
     renderOutline();
