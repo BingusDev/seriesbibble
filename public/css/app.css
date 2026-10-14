@@ -264,6 +264,12 @@ h1 .inline-edit, .inline-edit.big { font-family: var(--serif); font-size: 40px; 
 .pick-list .kind { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); width: 62px; flex-shrink: 0; }
 .pick-list .where { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; }
 .pick-list li.heading .label { padding-left: 12px; }
+.pick-list .label { min-width: 0; }
+.pick-list .snippet { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.pick-list .snippet mark { background: var(--flash); color: var(--ink); border-radius: 2px; padding: 0 1px; }
+.pick-list li.create { border-top: 1px dashed var(--line); border-radius: 0 0 6px 6px; }
+.pick-list li.create + li.create { border-top: 0; border-radius: 6px; }
+.pick-list li.create .kind { color: var(--link); }
 .modal-hint { margin: 0; padding: 9px 16px 13px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); }
 
 .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--paper); padding: 9px 16px; border-radius: 8px; box-shadow: var(--shadow-lift); z-index: 60; }
