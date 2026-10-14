@@ -11,6 +11,8 @@ An application designed to help you keep your Series Bible organized when writin
 - **Export** to PDF and Word (.docx) with a title page and table of contents. Cross-reference links stay clickable in both. A JSON backup export is also available.
 - **Accounts and sharing**: everyone signs in with a username and password. Each bible belongs to the person who made it; press **Share** to give other accounts edit access by username. Collaborators can edit, add and export; only the owner can share or delete the bible, and a collaborator can leave it from the home screen.
 - **Working together**: you can see who else has a bible open and who is on the same page. Changes other people save show up within a few seconds. If two people edit the same page at once, the second save is refused instead of silently overwriting the first, and that person picks **Keep my version** or **Load their version**.
+- **Page history**: press **History** on any page to see earlier versions and restore one. A version is kept every 10 minutes while you write and whenever someone else starts editing the page; the last 50 per page are kept. Restoring keeps the text it replaced as a version too.
+- **Trash**: deleting a page (or a whole section) moves its pages to the bible's **Trash**, at the bottom of the sidebar. Restore puts a page back in its old section and place, with its relationships, so links to it work again. Pages are removed for good after 30 days, or straight away with **Delete forever** or **Empty trash**.
 - Autosaves as you type. Everything is stored as JSON files in the data volume, with no external services.
 
 ## Run with Docker
@@ -62,6 +64,9 @@ PDF export needs Chromium or Chrome installed; set `CHROMIUM_PATH` if it is not 
 | `CHROMIUM_PATH` | auto-detected | Browser used for PDF export |
 | `TRUST_PROXY` | `loopback` | Reverse proxy addresses allowed to set `X-Forwarded-*` headers ([Express syntax](https://expressjs.com/en/guide/behind-proxies.html)), e.g. the Docker gateway `172.17.0.1` when Caddy runs on the host |
 | `ALLOW_SIGNUP` | `true` | Set to `false` so only the first account can be created from the sign-in screen |
+| `HISTORY_INTERVAL_MINUTES` | `10` | How often a page version is kept while someone writes |
+| `HISTORY_MAX_VERSIONS` | `50` | Versions kept per page; the oldest drop off first |
+| `TRASH_DAYS` | `30` | Days a deleted page stays in the trash |
 
 ## Tests
 

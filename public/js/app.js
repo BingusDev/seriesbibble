@@ -68,6 +68,7 @@
     section: (bid, sid) => `#/b/${bid}/s/${sid}`,
     page: (bid, pid, slug) => `#/b/${bid}/p/${pid}` + (slug ? `/h/${encodeURIComponent(slug)}` : ''),
     map: (bid) => `#/b/${bid}/map`,
+    trash: (bid) => `#/b/${bid}/trash`,
   };
 
   function findPage(pid) {
@@ -187,6 +188,7 @@
     if (parts[2] === 's' && parts[3]) Object.assign(r, { name: 'section', sid: parts[3] });
     if (parts[2] === 'p' && parts[3]) Object.assign(r, { name: 'page', pid: parts[3] });
     if (parts[2] === 'map') r.name = 'map';
+    if (parts[2] === 'trash') r.name = 'trash';
     if (r.name === 'page' && parts[4] === 'h' && parts[5]) r.slug = decodeURIComponent(parts[5]);
     return r;
   }
@@ -235,6 +237,11 @@
       teardownEditor();
       return RelMap.render(relCtx());
     }
+    if (r.name === 'trash') {
+      teardownEditor();
+      els.rightbar.hidden = true;
+      return SBHistory.renderTrash(historyCtx());
+    }
     return renderOverview();
   }
   window.addEventListener('hashchange', route);
@@ -278,6 +285,7 @@
       if (s) bits.push(`<span>${esc(s.name)}</span>`);
     }
     if (b && r.name === 'map') bits.push('<span>Relationship map</span>');
+    if (b && r.name === 'trash') bits.push('<span>Trash</span>');
     if (b && r.name === 'page') {
       const f = findPage(r.pid);
       if (f) {
@@ -448,7 +456,8 @@
         </div>`;
         })
         .join('')}
-      <button class="btn add-section" id="add-section">＋ Add section</button>`;
+      <button class="btn add-section" id="add-section">＋ Add section</button>
+      <a class="side-trash ${r.name === 'trash' ? 'active' : ''}" href="${link.trash(b.id)}">Trash</a>`;
 
     const filter = $('#side-filter');
     filter.oninput = () => {
@@ -716,7 +725,7 @@
     $('#sec-down').onclick = () => move(1);
     $('#sec-delete').onclick = async () => {
       const n = s.pages.length;
-      if (!confirm(`Delete the "${s.name}" section${n ? ` and its ${n} page${n === 1 ? '' : 's'}` : ''}? This cannot be undone.`)) return;
+      if (!confirm(`Delete the "${s.name}" section${n ? `? Its ${n} page${n === 1 ? '' : 's'} will go to the trash, where you can restore ${n === 1 ? 'it' : 'them'}.` : '?'}`)) return;
       await api('DELETE', `/api/bibles/${b.id}/sections/${s.id}`);
       b.sections = b.sections.filter((x) => x !== s);
       location.hash = link.bible(b.id);
@@ -735,7 +744,7 @@
     teardownEditor();
     if (!found) {
       els.rightbar.hidden = true;
-      els.main.innerHTML = `<div class="sheet"><h2>Page not found</h2><p>This link points to a page that was deleted or moved to another bible.</p><p><a href="${link.bible(b.id)}">Back to ${esc(b.title)}</a></p></div>`;
+      els.main.innerHTML = `<div class="sheet"><h2>Page not found</h2><p>This link points to a page that was deleted or moved to another bible. Deleted pages can be restored from the <a href="${link.trash(b.id)}">Trash</a>.</p><p><a href="${link.bible(b.id)}">Back to ${esc(b.title)}</a></p></div>`;
       return;
     }
     const { page, section } = found;
@@ -748,6 +757,7 @@
         <div class="page-meta">
           <span>Tip: select text and press <b>§ Link</b> to link it to any section, page or heading.</span>
           <span class="last-edit" id="last-edit">${page.updatedBy ? `Last edited by ${esc(page.updatedBy)}` : ''}</span>
+          <button class="btn small" id="page-history" title="See and restore earlier versions of this page">History</button>
           <button class="btn small danger" id="page-delete">Delete page</button>
         </div>
         <div class="page-presence" id="page-presence" hidden></div>
@@ -836,12 +846,28 @@
       }
     };
     $('#page-delete').onclick = async () => {
-      if (!confirm(`Delete "${page.title}"? Links to it from other pages will stop working.`)) return;
+      if (!confirm(`Move "${page.title}" to the trash? Links to it stop working until it is restored.`)) return;
+      await saver.flush();
       saver.pending = null;
       await api('DELETE', `/api/bibles/${b.id}/pages/${pid}`);
       section.pages = section.pages.filter((p) => p.id !== pid);
       location.hash = link.section(b.id, section.id);
+      toast(`Moved "${page.title}" to the trash.`);
     };
+    $('#page-history').onclick = () =>
+      SBHistory.openHistory({
+        ...historyCtx(),
+        page,
+        flush: () => saver.flush(),
+        onRestore: (fresh) => {
+          if (state.pageId !== pid) return Object.assign(page, fresh);
+          loadIntoEditor(page, fresh);
+          saver.status('Saved');
+          renderSidebar();
+          renderCrumbs();
+          document.title = `${page.title} · ${b.title}`;
+        },
+      });
 
     renderOutline();
     els.main.scrollTop = 0;
@@ -1216,6 +1242,15 @@
   // What the relationship map (relmap.js) needs from the app.
   function relCtx() {
     return { bible: state.bible, main: els.main, rightbar: els.rightbar, api, esc, link, toast };
+  }
+
+  // What page history and the trash (history.js) need from the app.
+  function historyCtx() {
+    return {
+      get bible() { return state.bible; },
+      main: els.main, api, esc, link, toast,
+      reload: () => refreshBible(),
+    };
   }
 
   function debounce(fn, ms) {
