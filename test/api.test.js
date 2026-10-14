@@ -67,6 +67,7 @@ test('export turns in-app links into document anchors', async () => {
   await call('PATCH', `/api/bibles/${b.id}/pages/${a.id}`, {
     content: `<p>See <a href="#/b/${b.id}/p/${w.id}/h/key-locations">places</a></p>`,
   });
+  await call('PATCH', `/api/bibles/${b.id}/pages/${w.id}`, { content: '<h2>Key Locations</h2><p>The docks.</p>' });
   const { body: full } = await call('GET', `/api/bibles/${b.id}`);
   const html = buildHtml(full);
   assert.ok(html.includes(`href="#p-${w.id}-key-locations"`));

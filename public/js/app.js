@@ -207,6 +207,7 @@
     }
 
     if (r.name === 'home') {
+      setFocusMode(false);
       state.bible = null;
       return renderHome();
     }
@@ -223,6 +224,7 @@
     }
     renderSidebar();
     renderTopbar();
+    if (r.name !== 'page') setFocusMode(false);
     if (r.name === 'page') {
       // Jumping between headings on the open page should not reload the editor.
       if (prev && prev.name === 'page' && prev.pid === r.pid && state.quill && state.pageId === r.pid) {
@@ -736,6 +738,74 @@
   function teardownEditor() {
     state.quill = null;
     state.pageId = null;
+    promptStyle.textContent = '';
+    promptsOnResize = null;
+  }
+
+  // Formats the toolbar offers. Anything else a paste brings along (colours, highlights,
+  // fonts, sizes) is dropped, so text from Word or the web matches the page and night draft.
+  const EDITOR_FORMATS = ['header', 'bold', 'italic', 'underline', 'strike', 'list', 'indent', 'blockquote', 'align', 'link', 'image'];
+
+  // Writing prompts show as faint text in the blank line under each template heading, until
+  // the writer types there. They live in a generated stylesheet, never in the page itself.
+  const promptStyle = document.head.appendChild(document.createElement('style'));
+  let promptsOnResize = null;
+  window.addEventListener('resize', () => promptsOnResize && promptsOnResize());
+  const cssString = (s) => `"${String(s).replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, ' ')}"`;
+  function renderPrompts(quill, tmpl) {
+    if (state.quill !== quill) return;
+    const prompts = new Map(tmpl.headings.map((h) => [h.title.trim().toLowerCase(), h.prompt]));
+    if (!prompts.size) return (promptStyle.textContent = '');
+    const targets = [];
+    [...quill.root.children].forEach((el, i) => {
+      if (!/^H[1-3]$/.test(el.tagName)) return;
+      const text = prompts.get(el.textContent.trim().toLowerCase());
+      const next = el.nextElementSibling;
+      if (!text || !next || next.tagName !== 'P' || next.textContent || next.querySelector('img')) return;
+      targets.push({ sel: `.editor-wrap .ql-editor > :nth-child(${i + 1}) + p:has(> br:only-child)`, text, p: next });
+    });
+    promptStyle.textContent = targets.map((t) => `${t.sel}::before { content: ${cssString(t.text)}; }`).join('\n');
+    // The prompt floats over its blank line like a placeholder, so the caret sits at the start
+    // of the line; a prompt that wraps gets the line stretched to fit, so it never covers the next heading.
+    const extra = targets
+      .map((t) => ({ ...t, h: parseFloat(getComputedStyle(t.p, '::before').height) }))
+      .filter((t) => t.h > t.p.offsetHeight)
+      .map((t) => `${t.sel} { min-height: ${Math.ceil(t.h)}px; }`);
+    if (extra.length) promptStyle.textContent += '\n' + extra.join('\n');
+  }
+
+  // Puts the caret on the first line that isn't a heading, so a new page's first sentence
+  // doesn't land in its "Overview" heading.
+  function caretToBody(quill) {
+    const line = quill.getLines().find((l) => l.statics.blotName !== 'header');
+    quill.focus();
+    quill.setSelection(line ? quill.getIndex(line) : quill.getLength() - 1, 0, 'silent');
+  }
+
+  const bodyIsEmpty = (quill) =>
+    !quill.getLines().some((l) => l.statics.blotName !== 'header' && /\S/.test(quill.getText(quill.getIndex(l), l.length())));
+
+  const countWords = (text) => (text.match(/[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu) || []).length;
+  function renderWordCount(quill) {
+    const el = $('#word-count');
+    if (!el || state.quill !== quill) return;
+    // Headings are the page's scaffolding, so only the writing under them counts.
+    const total = quill
+      .getLines()
+      .filter((l) => l.statics.blotName !== 'header')
+      .reduce((n, l) => n + countWords(quill.getText(quill.getIndex(l), l.length())), 0);
+    const sel = quill.getSelection();
+    const picked = sel && sel.length ? countWords(quill.getText(sel.index, sel.length)) : 0;
+    const n = (x) => x.toLocaleString();
+    el.textContent = picked ? `${n(picked)} of ${n(total)} words` : `${n(total)} ${total === 1 ? 'word' : 'words'}`;
+  }
+
+  // Focus mode hides everything but the page. It stays on while moving between pages.
+  function setFocusMode(on) {
+    document.body.classList.toggle('focus-mode', on);
+    const btn = $('#focus-btn');
+    if (btn) btn.setAttribute('aria-pressed', String(on));
+    if (on && state.quill) state.quill.focus();
   }
 
   function renderPage(pid, slug) {
@@ -757,21 +827,13 @@
         <div class="page-meta">
           <span>Tip: select text and press <b>§ Link</b> to link it to any section, page or heading.</span>
           <span class="last-edit" id="last-edit">${page.updatedBy ? `Last edited by ${esc(page.updatedBy)}` : ''}</span>
+          <span class="word-count" id="word-count" aria-live="off"></span>
+          <button class="btn small" id="focus-btn" aria-pressed="false" title="Hide everything but the page (Ctrl+Shift+F)">Focus</button>
           <button class="btn small" id="page-history" title="See and restore earlier versions of this page">History</button>
           <button class="btn small danger" id="page-delete">Delete page</button>
         </div>
         <div class="page-presence" id="page-presence" hidden></div>
         <div class="conflict" id="conflict" hidden></div>
-        ${
-          tmpl.headings.length
-            ? `<details class="prompts" ${excerpt(page.content) ? '' : 'open'}>
-          <summary>Writing prompts · ${esc(tmpl.name)} template</summary>
-          <dl>${tmpl.headings
-            .map((h) => `<dt><a href="${link.page(b.id, pid, slugify(h.title))}">${esc(h.title)}</a></dt><dd>${esc(h.prompt)}</dd>`)
-            .join('')}</dl>
-        </details>`
-            : ''
-        }
         <div id="toolbar">
           <span class="ql-formats">
             <select class="ql-header"><option value="1">Heading 1</option><option value="2">Heading 2</option><option value="3">Heading 3</option><option selected>Body</option></select>
@@ -783,31 +845,47 @@
           <span class="ql-formats"><button class="ql-clean"></button></span>
         </div>
         <div id="editor"></div>
-      </div>`;
+      </div>
+      <button class="btn small focus-exit" id="focus-exit" type="button" title="Leave focus mode (Esc)">Exit focus</button>`;
 
     const quill = new Quill('#editor', {
       theme: 'snow',
       placeholder: 'Start writing…',
+      formats: EDITOR_FORMATS,
       modules: {
         toolbar: { container: '#toolbar', handlers: { xref: () => openPicker('link') } },
         keyboard: {
           bindings: {
             xref: { key: 'l', shortKey: true, handler: () => { openPicker('link'); return false; } },
+            focus: { key: 'f', shortKey: true, shiftKey: true, handler: () => { setFocusMode(!document.body.classList.contains('focus-mode')); return false; } },
           },
         },
       },
+    });
+    // Pasted headings deeper than the toolbar's three levels become Heading 3.
+    quill.clipboard.addMatcher(Node.ELEMENT_NODE, (node, delta) => {
+      for (const op of delta.ops) if (op.attributes && op.attributes.header > 3) op.attributes.header = 3;
+      return delta;
     });
     quill.clipboard.dangerouslyPasteHTML(page.content || '');
     quill.history.clear();
     state.quill = quill;
     state.pageId = pid;
 
+    const refreshPrompts = debounce(() => renderPrompts(quill, tmpl), 60);
+    const refreshCount = debounce(() => renderWordCount(quill), 200);
+    renderPrompts(quill, tmpl);
+    renderWordCount(quill);
+    promptsOnResize = refreshPrompts;
     quill.on('text-change', (delta, old, source) => {
+      refreshPrompts();
+      refreshCount();
       if (source !== 'user') return;
       page.content = quill.root.innerHTML;
       saver.queue(pid, { content: page.content });
       renderOutline();
     });
+    quill.on('selection-change', refreshCount);
 
     // Internal links navigate inside the app instead of opening a new tab.
     quill.root.addEventListener('click', (e) => {
@@ -842,9 +920,12 @@
     titleInput.onkeydown = (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        quill.focus();
+        caretToBody(quill);
       }
     };
+    $('#focus-btn').onclick = () => setFocusMode(!document.body.classList.contains('focus-mode'));
+    $('#focus-exit').onclick = () => setFocusMode(false);
+    setFocusMode(document.body.classList.contains('focus-mode'));
     $('#page-delete').onclick = async () => {
       if (!confirm(`Move "${page.title}" to the trash? Links to it stop working until it is restored.`)) return;
       await saver.flush();
@@ -872,7 +953,7 @@
     renderOutline();
     els.main.scrollTop = 0;
     if (slug) requestAnimationFrame(() => scrollToHeading(slug));
-    else if (!page.content || page.content === '<p><br></p>') quill.focus();
+    else if (bodyIsEmpty(quill)) caretToBody(quill);
   }
 
   function editorHeadings() {
@@ -1108,6 +1189,14 @@
       e.preventDefault();
       if (els.modal.hidden) openPicker('jump');
     }
+    // The editor has its own binding; this one works from the title and elsewhere on the page.
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f' && state.quill && !e.defaultPrevented) {
+      e.preventDefault();
+      setFocusMode(!document.body.classList.contains('focus-mode'));
+    }
+    if (e.key === 'Escape' && document.body.classList.contains('focus-mode') && els.modal.hidden && !e.defaultPrevented) {
+      setFocusMode(false);
+    }
   });
 
   // ---------- Collaboration ----------
@@ -1119,6 +1208,8 @@
     state.quill.setContents([], 'silent');
     state.quill.clipboard.dangerouslyPasteHTML(page.content || '', 'silent');
     if (sel) state.quill.setSelection(Math.min(sel.index, state.quill.getLength() - 1), 0, 'silent');
+    if (promptsOnResize) promptsOnResize();
+    renderWordCount(state.quill);
     // Always show their title, even mid-focus, or typing would save over their rename.
     const title = $('#page-title');
     if (title && title.value !== page.title) {
