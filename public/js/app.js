@@ -40,7 +40,16 @@
     pageId: null,       // page loaded in the editor
     collapsed: loadCollapsed(),
     filter: '',
+    templates: [],      // section templates from /api/templates
   };
+
+  // Template for a section kind; unknown kinds fall back to a blank page.
+  function templateFor(kind) {
+    return (
+      state.templates.find((t) => t.kind === kind) ||
+      state.templates.find((t) => t.kind === 'custom') || { kind: 'custom', name: 'Blank', singular: 'page', headings: [] }
+    );
+  }
 
   function loadCollapsed() {
     try { return JSON.parse(localStorage.getItem('sb.collapsed') || '{}'); } catch (_) { return {}; }
@@ -417,7 +426,7 @@
 
   async function addPage(sid) {
     const section = state.bible.sections.find((s) => s.id === sid);
-    const singular = { Characters: 'character', World: 'world entry' }[section.name] || 'page';
+    const singular = templateFor(section.kind).singular;
     const title = prompt(`Name of the new ${singular} in ${section.name}:`);
     if (!title || !title.trim()) return;
     const page = await api('POST', `/api/bibles/${state.bible.id}/sections/${sid}/pages`, { title: title.trim() });
@@ -426,12 +435,79 @@
     location.hash = link.page(state.bible.id, page.id);
   }
 
-  async function addSection() {
-    const name = prompt('Name of the new section (e.g. Episodes, Themes, Tone & Style):');
-    if (!name || !name.trim()) return;
-    const section = await api('POST', `/api/bibles/${state.bible.id}/sections`, { name: name.trim() });
-    state.bible.sections.push(section);
-    location.hash = link.section(state.bible.id, section.id);
+  // Add-section dialog: pick a template, which also suggests the section name.
+  function addSection() {
+    const b = state.bible;
+    const choices = state.templates.length ? state.templates : [templateFor('custom')];
+    const used = new Set(b.sections.map((s) => s.kind));
+    const first = choices.find((t) => !used.has(t.kind)) || choices[choices.length - 1];
+    const wrap = document.createElement('div');
+    wrap.className = 'modal-backdrop';
+    wrap.innerHTML = `
+      <form class="modal tmpl-modal" role="dialog" aria-modal="true" aria-labelledby="tmpl-title">
+        <div class="modal-head">
+          <h2 id="tmpl-title">Add a section</h2>
+          <button type="button" class="icon-btn" data-close aria-label="Close">×</button>
+        </div>
+        <div class="tmpl-body">
+          <p class="tmpl-label">Template</p>
+          <div class="tmpl-grid">
+            ${choices
+              .map(
+                (t) => `
+              <label class="tmpl-card">
+                <input type="radio" name="kind" value="${esc(t.kind)}" ${t === first ? 'checked' : ''}>
+                <strong>${esc(t.name)}${used.has(t.kind) && t.kind !== 'custom' ? ' <small>in use</small>' : ''}</strong>
+                <span>${esc(t.description || '')}</span>
+                ${t.headings.length ? `<em>${t.headings.map((h) => esc(h.title)).join(' · ')}</em>` : ''}
+              </label>`
+              )
+              .join('')}
+          </div>
+          <label class="tmpl-label" for="tmpl-name">Section name</label>
+          <input class="modal-search tmpl-name" id="tmpl-name" name="name" required maxlength="200" autocomplete="off">
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn" data-close>Cancel</button>
+          <button class="btn primary">Add section</button>
+        </div>
+      </form>`;
+    document.body.appendChild(wrap);
+    const form = $('form', wrap);
+    const nameInput = $('#tmpl-name', wrap);
+    let suggested = first.kind === 'custom' ? '' : first.name;
+    nameInput.value = suggested;
+    // Picking a template renames the section unless the writer typed their own name.
+    form.onchange = (e) => {
+      if (e.target.name !== 'kind') return;
+      const t = templateFor(e.target.value);
+      const next = t.kind === 'custom' ? '' : t.name;
+      if (!nameInput.value.trim() || nameInput.value === suggested) nameInput.value = next;
+      suggested = next;
+    };
+    const close = () => wrap.remove();
+    wrap.onclick = (e) => {
+      if (e.target === wrap || e.target.closest('[data-close]')) close();
+    };
+    wrap.onkeydown = (e) => {
+      if (e.key === 'Escape') close();
+    };
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const name = nameInput.value.trim();
+      if (!name) return;
+      const kind = new FormData(form).get('kind');
+      try {
+        const section = await api('POST', `/api/bibles/${b.id}/sections`, { name, kind });
+        close();
+        b.sections.push(section);
+        location.hash = link.section(b.id, section.id);
+      } catch (err) {
+        toast(`Could not add section: ${err.message}`);
+      }
+    };
+    nameInput.focus();
+    nameInput.select();
   }
 
   // ---------- Overview ----------
@@ -496,6 +572,13 @@
             <button class="btn small" id="sec-down" ${b.sections[b.sections.length - 1] === s ? 'disabled' : ''}>Move down</button>
             <button class="btn small danger" id="sec-delete">Delete section</button>
           </span></div>
+        <div class="tmpl-row">
+          <label class="tmpl-select">New pages use
+            <select id="sec-kind">${(state.templates.length ? state.templates : [templateFor(s.kind)])
+              .map((t) => `<option value="${esc(t.kind)}" ${t.kind === templateFor(s.kind).kind ? 'selected' : ''}>${esc(t.name)} template</option>`)
+              .join('')}</select>
+          </label>
+        </div>
         <div class="cards">
           ${s.pages
             .map(
@@ -506,6 +589,12 @@
         </div>
       </div>`;
     $('#sec-add').onclick = () => addPage(s.id);
+    $('#sec-kind').onchange = async (e) => {
+      const kind = e.target.value;
+      await api('PATCH', `/api/bibles/${b.id}/sections/${s.id}`, { kind });
+      s.kind = kind;
+      toast(`New pages in ${s.name} will use the ${templateFor(kind).name} template.`);
+    };
     $('#section-name').oninput = debounce(async () => {
       const name = $('#section-name').value.trim();
       if (!name) return;
@@ -549,6 +638,7 @@
       return;
     }
     const { page, section } = found;
+    const tmpl = templateFor(section.kind);
     document.title = `${page.title} · ${b.title}`;
     els.main.innerHTML = `
       <div class="sheet editor-wrap">
@@ -558,6 +648,16 @@
           <span>Tip: select text and press <b>§ Link</b> to link it to any section, page or heading.</span>
           <button class="btn small danger" id="page-delete">Delete page</button>
         </div>
+        ${
+          tmpl.headings.length
+            ? `<details class="prompts" ${excerpt(page.content) ? '' : 'open'}>
+          <summary>Writing prompts · ${esc(tmpl.name)} template</summary>
+          <dl>${tmpl.headings
+            .map((h) => `<dt><a href="${link.page(b.id, pid, slugify(h.title))}">${esc(h.title)}</a></dt><dd>${esc(h.prompt)}</dd>`)
+            .join('')}</dl>
+        </details>`
+            : ''
+        }
         <div id="toolbar">
           <span class="ql-formats">
             <select class="ql-header"><option value="1">Heading 1</option><option value="2">Heading 2</option><option value="3">Heading 3</option><option selected>Body</option></select>
@@ -803,5 +903,9 @@
     };
   }
 
-  route();
+  // Templates only drive optional UI, so the app still starts if they fail to load.
+  api('GET', '/api/templates')
+    .then((t) => (state.templates = t))
+    .catch(() => {})
+    .finally(route);
 })();

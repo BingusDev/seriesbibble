@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const store = require('./store');
+const templates = require('./templates');
 const { toDocx, toPdf } = require('./export');
 
 const app = express();
@@ -20,6 +21,8 @@ function withBible(handler) {
 }
 
 const str = (v, max = 500) => (typeof v === 'string' ? v.slice(0, max) : undefined);
+
+app.get('/api/templates', (req, res) => res.json(templates.TEMPLATES));
 
 app.get('/api/bibles', (req, res) => res.json(store.list()));
 
@@ -42,7 +45,7 @@ app.delete('/api/bibles/:id', (req, res) => {
 
 // Sections
 app.post('/api/bibles/:id/sections', withBible((req, res, bible) => {
-  const section = store.makeSection(str(req.body.name) || 'New Section');
+  const section = store.makeSection(str(req.body.name) || 'New Section', str(req.body.kind));
   bible.sections.push(section);
   store.write(bible);
   res.status(201).json(section);
@@ -52,6 +55,7 @@ app.patch('/api/bibles/:id/sections/:sid', withBible((req, res, bible) => {
   const section = bible.sections.find((s) => s.id === req.params.sid);
   if (!section) return res.status(404).json({ error: 'Section not found' });
   if (str(req.body.name)) section.name = str(req.body.name);
+  if (templates.isKind(req.body.kind)) section.kind = req.body.kind;
   if (Number.isInteger(req.body.position)) {
     bible.sections.splice(bible.sections.indexOf(section), 1);
     const pos = Math.max(0, Math.min(req.body.position, bible.sections.length));

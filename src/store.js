@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const templates = require('./templates');
 
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
 const BIBLE_DIR = path.join(DATA_DIR, 'bibles');
@@ -9,16 +10,6 @@ fs.mkdirSync(BIBLE_DIR, { recursive: true });
 
 const newId = () => crypto.randomBytes(6).toString('hex');
 const now = () => new Date().toISOString();
-
-const TEMPLATES = {
-  characters:
-    '<h2>Overview</h2><p><br></p><h2>Appearance</h2><p><br></p><h2>Personality</h2><p><br></p>' +
-    '<h2>Backstory</h2><p><br></p><h2>Arc</h2><p><br></p><h2>Relationships</h2><p><br></p>',
-  world:
-    '<h2>Overview</h2><p><br></p><h2>History</h2><p><br></p><h2>Key Locations</h2><p><br></p>' +
-    '<h2>Rules &amp; Logic</h2><p><br></p>',
-  custom: '<p><br></p>',
-};
 
 function fileFor(id) {
   if (!/^[a-f0-9]{12}$/.test(id)) return null;
@@ -52,10 +43,11 @@ function list() {
 }
 
 function makePage(title, kind) {
-  return { id: newId(), title, content: TEMPLATES[kind] || TEMPLATES.custom, updatedAt: now() };
+  return { id: newId(), title, content: templates.pageContent(kind), updatedAt: now() };
 }
 
-function makeSection(name, kind = 'custom') {
+function makeSection(name, kind) {
+  if (!templates.isKind(kind)) kind = templates.kindForName(name);
   return { id: newId(), name, kind, pages: [] };
 }
 
