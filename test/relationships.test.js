@@ -9,17 +9,24 @@ const app = require('../src/server');
 
 let server;
 let base;
+let cookie;
 before(async () => {
   server = app.listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}`;
+  const res = await fetch(`${base}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'writer', password: 'correct horse' }),
+  });
+  cookie = res.headers.get('set-cookie').split(';')[0];
 });
 after(() => server.close());
 
 const call = async (method, url, body) => {
   const res = await fetch(base + url, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
+    headers: body ? { 'Content-Type': 'application/json', cookie } : { cookie },
     body: body ? JSON.stringify(body) : undefined,
   });
   return { status: res.status, body: res.status === 204 ? null : await res.json() };

@@ -171,6 +171,39 @@ h1 .inline-edit, .inline-edit.big { font-family: var(--serif); font-size: 34px; 
   .sheet { box-shadow: none; margin: 0; padding: 0; max-width: none; }
 }
 
+/* Accounts and collaboration */
+.account { display: flex; align-items: center; gap: 8px; }
+.account-btn { display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px; }
+.avatar { --hue: 20; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; font-size: 10px; font-weight: 700; letter-spacing: .02em; color: #fff; background: hsl(var(--hue) 45% 42%); flex-shrink: 0; }
+.presence { display: flex; }
+.presence .avatar { margin-left: -6px; box-shadow: 0 0 0 2px var(--paper); }
+.presence .avatar:first-child { margin-left: 0; }
+.login { max-width: 380px; margin: 10vh auto; padding: 32px; background: var(--paper); box-shadow: var(--shadow); border-radius: 8px; }
+.login h1 { font-family: var(--serif); font-size: 26px; margin: 0 0 6px; }
+.login .lede { color: var(--muted); margin-top: 0; }
+.login form, .stack-form { display: flex; flex-direction: column; gap: 12px; }
+.login label, .stack-form label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+.login label small { font-weight: normal; color: var(--muted); }
+.login input, .stack-form input, .share-form input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; font-weight: normal; }
+.login-error { color: #a01b1b; margin: 0; }
+.login-switch { color: var(--muted); margin: 18px 0 0; }
+.modal.dialog { max-height: 80vh; }
+.dialog-body { padding: 6px 16px 16px; overflow-y: auto; }
+.dialog-body .modal-hint { border-top: 0; padding: 8px 0 0; }
+.people { list-style: none; margin: 0 0 14px; padding: 0; }
+.people li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.people li span:not(.avatar) { flex: 1; }
+.people small { color: var(--muted); }
+.people em { color: var(--muted); font-size: 12px; }
+.share-form { display: flex; gap: 8px; }
+.share-form input { flex: 1; }
+.last-edit { margin-left: auto; margin-right: 10px; }
+.page-presence { display: flex; align-items: center; gap: 6px; padding: 6px 10px; margin-bottom: 8px; background: #eef3fb; border-radius: 6px; color: #284a7a; font-size: 12px; }
+.conflict { padding: 10px 12px; margin-bottom: 8px; background: #fdf1e3; border: 1px solid #e8c79c; border-radius: 6px; }
+.conflict p { margin: 0 0 8px; }
+@media (max-width: 760px) { .account-btn span:not(.avatar) { display: none; } }
+@media print { .account { display: none; } }
+.bible-card .icon-btn.leave { font-size: 12px; padding: 4px 6px; }
 /* Section templates */
 .tmpl-modal { width: min(720px, 94vw); max-height: 86vh; }
 .tmpl-body { overflow-y: auto; padding: 0 16px 8px; }

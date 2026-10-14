@@ -4,8 +4,13 @@ const store = require('./store');
 const templates = require('./templates');
 const { toDocx, toPdf } = require('./export');
 const relationships = require('./relationships');
+const collab = require('./collab');
 
 const app = express();
+// Only proxies named in TRUST_PROXY may set X-Forwarded-For/-Proto (Express syntax,
+// e.g. "loopback" or "172.17.0.1"). Trusting every private address would let LAN
+// clients that reach the app directly fake their address.
+app.set('trust proxy', process.env.TRUST_PROXY || 'loopback');
 app.use(express.json({ limit: '25mb' }));
 
 const pub = path.join(__dirname, '..', 'public');
@@ -21,14 +26,20 @@ function withBible(handler) {
   };
 }
 
+// Sign-in, ownership and sharing checks run before every bible route below.
+app.use(collab.router);
+
 const str = (v, max = 500) => (typeof v === 'string' ? v.slice(0, max) : undefined);
 
 app.get('/api/templates', (req, res) => res.json(templates.TEMPLATES));
 
-app.get('/api/bibles', (req, res) => res.json(store.list()));
+app.get('/api/bibles', (req, res) => {
+  const mine = store.list().filter((b) => collab.canAccess(req.user, b));
+  res.json(mine.map((b) => collab.summaryFor(req.user, b)));
+});
 
 app.post('/api/bibles', (req, res) => {
-  res.status(201).json(store.create({ title: str(req.body.title), logline: str(req.body.logline, 2000) }));
+  res.status(201).json(store.create({ title: str(req.body.title), logline: str(req.body.logline, 2000), ownerId: req.user.id }));
 });
 
 app.get('/api/bibles/:id', withBible((req, res, bible) => res.json(bible)));
@@ -87,6 +98,11 @@ app.patch('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
   const found = store.findPage(bible, req.params.pid);
   if (!found) return res.status(404).json({ error: 'Page not found' });
   const { page, section } = found;
+  // Someone else saved this page since the editor loaded it: refuse rather than overwrite.
+  const editsText = str(req.body.title) || typeof req.body.content === 'string';
+  if (editsText && Number.isInteger(req.body.baseRev) && req.body.baseRev !== (page.rev || 0)) {
+    return res.status(409).json({ error: 'This page was changed by someone else.', page });
+  }
   if (str(req.body.title)) page.title = str(req.body.title);
   if (typeof req.body.content === 'string') page.content = req.body.content;
   if (req.body.sectionId && req.body.sectionId !== section.id) {
@@ -102,6 +118,10 @@ app.patch('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
     owner.pages.splice(pos, 0, page);
   }
   page.updatedAt = store.now();
+  if (editsText) {
+    page.rev = (page.rev || 0) + 1;
+    page.updatedBy = req.user.displayName || req.user.username;
+  }
   store.write(bible);
   res.json(page);
 }));

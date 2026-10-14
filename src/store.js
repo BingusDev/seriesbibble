@@ -37,7 +37,10 @@ function list() {
     .filter((f) => f.endsWith('.json'))
     .map((f) => {
       const b = JSON.parse(fs.readFileSync(path.join(BIBLE_DIR, f), 'utf8'));
-      return { id: b.id, title: b.title, logline: b.logline, updatedAt: b.updatedAt };
+      return {
+        id: b.id, title: b.title, logline: b.logline, updatedAt: b.updatedAt,
+        ownerId: b.ownerId, collaborators: b.collaborators || [],
+      };
     })
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
 }
@@ -51,13 +54,15 @@ function makeSection(name, kind) {
   return { id: newId(), name, kind, pages: [] };
 }
 
-function create({ title, logline }) {
+function create({ title, logline, ownerId }) {
   const characters = makeSection('Characters', 'characters');
   const world = makeSection('World', 'world');
   const bible = {
     id: newId(),
     title: title || 'Untitled Series',
     logline: logline || '',
+    ownerId,
+    collaborators: [],
     createdAt: now(),
     updatedAt: now(),
     sections: [characters, world],
@@ -78,4 +83,4 @@ function findPage(bible, pageId) {
   return null;
 }
 
-module.exports = { read, write, list, create, remove, makePage, makeSection, findPage, newId, now };
+module.exports = { DATA_DIR, read, write, list, create, remove, makePage, makeSection, findPage, newId, now };
