@@ -56,9 +56,46 @@ function preparePageHtml(page, bible) {
   html = html.replace(/href="#\/b\/([a-f0-9]+)\/s\/([a-f0-9]+)"/g, (m, bid, sid) =>
     bid === bible.id ? `href="#${sectionAnchor(sid)}"` : m
   );
+  html = dropEmptyHeadings(html);
   // Quill paragraphs that are only a line break print as blank lines; keep them small.
   html = html.replace(/<p><br><\/p>/g, '<p>&nbsp;</p>');
   return html;
+}
+
+const hasText = (html) => /<img\b/i.test(html) || /\S/.test(html.replace(/<[^>]+>/g, '').replace(/&nbsp;|&#160;/g, ' '));
+
+// Template headings nobody wrote under would print as a stack of empty titles, so a heading
+// goes when nothing but blank lines sits under it (counting its own subheadings' text).
+function dropEmptyHeadings(html) {
+  const parts = [];
+  const re = /<h([1-6])\b[^>]*>[\s\S]*?<\/h\1>/g;
+  let last = 0;
+  for (const m of html.matchAll(re)) {
+    parts.push({ html: html.slice(last, m.index) });
+    parts.push({ html: m[0], level: Number(m[1]) });
+    last = m.index + m[0].length;
+  }
+  parts.push({ html: html.slice(last) });
+  parts.forEach((p, i) => {
+    if (!p.level) return;
+    let filled = false;
+    for (let j = i + 1; j < parts.length; j++) {
+      if (parts[j].level && parts[j].level <= p.level) break;
+      if (!parts[j].level && hasText(parts[j].html)) { filled = true; break; }
+    }
+    p.drop = !filled;
+  });
+  // The blank lines under a dropped heading go with it.
+  return parts
+    .filter((p, i) => !p.drop && !(!p.level && i > 0 && parts[i - 1].drop && !hasText(p.html)))
+    .map((p) => p.html)
+    .join('');
+}
+
+// Links to a heading that was left out point at its page instead.
+function retargetMissing(html) {
+  const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
+  return html.replace(/href="#(p-([a-f0-9]+)-[^"]+)"/g, (m, id, pid) => (ids.has(id) ? m : `href="#${pageAnchor(pid)}"`));
 }
 
 const STYLES = `
@@ -110,7 +147,7 @@ function buildHtml(bible, { forWord = false } = {}) {
 <style>${forWord ? '' : STYLES}</style></head><body>
 <div class="title-page"><h1>${esc(bible.title)}</h1>${bible.logline ? `<p>${esc(bible.logline)}</p>` : ''}<p>Series Bible</p></div>
 <div class="toc"><h1>Contents</h1><ul>${toc}</ul></div>
-${body}
+${retargetMissing(body)}
 </body></html>`;
 }
 
