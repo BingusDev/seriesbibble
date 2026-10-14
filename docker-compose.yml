@@ -6,6 +6,8 @@ services:
       - "3000:3000"
     volumes:
       - bible-data:/data
+    # environment:
+    #   ALLOW_SIGNUP: "false"   # only allow new accounts from users-cli.js
     restart: unless-stopped
 
 volumes:

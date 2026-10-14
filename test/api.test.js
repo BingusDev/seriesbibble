@@ -10,17 +10,24 @@ const { buildHtml } = require('../src/export');
 
 let server;
 let base;
+let cookie;
 before(async () => {
   server = app.listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}`;
+  const res = await fetch(`${base}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'writer', password: 'correct horse' }),
+  });
+  cookie = res.headers.get('set-cookie').split(';')[0];
 });
 after(() => server.close());
 
 const call = async (method, url, body) => {
   const res = await fetch(base + url, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : {},
+    headers: body ? { 'Content-Type': 'application/json', cookie } : { cookie },
     body: body ? JSON.stringify(body) : undefined,
   });
   return { status: res.status, body: res.status === 204 ? null : await res.json() };
@@ -68,7 +75,7 @@ test('export turns in-app links into document anchors', async () => {
 
 test('word export is a valid docx with internal links', async () => {
   const { body: b } = await call('POST', '/api/bibles', { title: 'Docx' });
-  const res = await fetch(`${base}/api/bibles/${b.id}/export.docx`);
+  const res = await fetch(`${base}/api/bibles/${b.id}/export.docx`, { headers: { cookie } });
   assert.strictEqual(res.status, 200);
   const buf = Buffer.from(await res.arrayBuffer());
   assert.strictEqual(buf.subarray(0, 2).toString(), 'PK');

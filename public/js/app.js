@@ -25,9 +25,13 @@
       body: body ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) {
-      let msg = res.statusText;
-      try { msg = (await res.json()).error || msg; } catch (_) { /* not json */ }
-      throw new Error(msg);
+      let data = {};
+      try { data = await res.json(); } catch (_) { /* not json */ }
+      if (res.status === 401) {
+        state.bible = null;
+        window.SBCollab.signedOut();
+      }
+      throw Object.assign(new Error(data.error || res.statusText), { status: res.status, data });
     }
     return res.status === 204 ? null : res.json();
   }
@@ -40,6 +44,7 @@
     pageId: null,       // page loaded in the editor
     collapsed: loadCollapsed(),
     filter: '',
+    sig: null,          // server's fingerprint of the bible's sections and pages
   };
 
   function loadCollapsed() {
@@ -98,6 +103,8 @@
   const saver = {
     timer: null,
     pending: null,
+    inflight: null,     // promise of the save on the wire, so saves never overlap
+    conflict: null,     // page id whose save was refused because someone else changed it
     status(text) {
       const el = $('#save-state');
       if (el) el.textContent = text;
@@ -111,19 +118,42 @@
     },
     async flush() {
       clearTimeout(this.timer);
+      while (this.inflight) await this.inflight;
       const job = this.pending;
-      this.pending = null;
       if (!job || !state.bible) return;
+      if (this.conflict === job.pid) return; // waits for the person to pick a version
+      this.pending = null;
       this.status('Saving…');
+      const found = findPage(job.pid);
+      const patch = { ...job.patch, baseRev: found ? found.page.rev || 0 : undefined };
+      const bid = state.bible.id;
+      this.inflight = (async () => {
+        try {
+          const page = await api('PATCH', `/api/bibles/${bid}/pages/${job.pid}`, patch);
+          const now = findPage(job.pid);
+          if (now) Object.assign(now.page, { rev: page.rev, updatedBy: page.updatedBy, updatedAt: page.updatedAt });
+          if (!this.pending) this.status('Saved');
+        } catch (err) {
+          if (err.status === 409 && err.data && err.data.page) {
+            // Put the edit back so "Keep mine" can send it again.
+            this.pending = { pid: job.pid, patch: Object.assign(job.patch, this.pending ? this.pending.patch : {}) };
+            this.conflict = job.pid;
+            this.status('Not saved');
+            showConflict(job.pid, err.data.page);
+          } else {
+            this.status('Save failed');
+            toast(`Could not save: ${err.message}`);
+          }
+        }
+      })();
       try {
-        const page = await api('PATCH', `/api/bibles/${state.bible.id}/pages/${job.pid}`, job.patch);
-        const found = findPage(job.pid);
-        if (found) Object.assign(found.page, page);
-        if (!this.pending) this.status('Saved');
-      } catch (err) {
-        this.status('Save failed');
-        toast(`Could not save: ${err.message}`);
+        await this.inflight;
+      } finally {
+        this.inflight = null;
       }
+    },
+    busyWith(pid) {
+      return !!((this.pending && this.pending.pid === pid) || this.inflight || this.conflict === pid);
     },
   };
   window.addEventListener('beforeunload', (e) => {
@@ -150,6 +180,12 @@
     state.route = r;
     document.body.classList.remove('side-open');
     await saver.flush();
+    // A refused save has to be settled on its own page before going elsewhere.
+    if (saver.conflict && state.bible && !(r.name === 'page' && r.pid === saver.conflict)) {
+      toast('Choose which version of this page to keep first.');
+      location.hash = link.page(state.bible.id, saver.conflict);
+      return;
+    }
 
     if (r.name === 'home') {
       state.bible = null;
@@ -158,7 +194,9 @@
     if (!state.bible || state.bible.id !== r.bid) {
       try {
         state.bible = await api('GET', `/api/bibles/${r.bid}`);
+        state.sig = null;
       } catch (err) {
+        if (err.status === 401) return;
         toast('That series bible could not be found.');
         location.hash = '#/';
         return;
@@ -211,6 +249,7 @@
       <button class="btn small side-toggle" id="side-toggle">☰ Sections</button>
       <span class="save-state" id="save-state"></span>
       <button class="btn" id="jump-btn" title="Jump to (Ctrl+K)">Jump to…</button>
+      <button class="btn" id="share-btn" title="Share this bible with other people">Share</button>
       <div class="menu">
         <button class="btn primary" id="export-btn">Export ▾</button>
         <div class="menu-list" id="export-menu" hidden>
@@ -221,6 +260,11 @@
       </div>`;
     $('#side-toggle').onclick = () => document.body.classList.toggle('side-open');
     $('#jump-btn').onclick = () => openPicker('jump');
+    $('#share-btn').onclick = () =>
+      window.SBCollab.openShare(state.bible, () => {
+        state.bible = null;
+        location.hash = '#/';
+      });
     const menu = $('#export-menu');
     $('#export-btn').onclick = (e) => {
       e.stopPropagation();
@@ -281,8 +325,16 @@
             <div class="bible-card">
               <a href="${link.bible(b.id)}"><h3>${esc(b.title)}</h3>
               ${b.logline ? `<p>${esc(b.logline)}</p>` : ''}
-              <small>Edited ${new Date(b.updatedAt).toLocaleString()}</small></a>
-              <button class="icon-btn" data-delete="${b.id}" data-title="${esc(b.title)}" title="Delete">🗑</button>
+              <small>Edited ${new Date(b.updatedAt).toLocaleString()}${
+                b.role === 'owner'
+                  ? b.collaboratorCount ? ` · shared with ${b.collaboratorCount} ${b.collaboratorCount === 1 ? 'person' : 'people'}` : ''
+                  : ` · shared by ${esc(b.owner ? b.owner.displayName : 'someone')}`
+              }</small></a>
+              ${
+                b.role === 'owner'
+                  ? `<button class="icon-btn" data-delete="${b.id}" data-title="${esc(b.title)}" title="Delete">🗑</button>`
+                  : `<button class="icon-btn leave" data-leave="${b.id}" data-title="${esc(b.title)}" title="Stop seeing this shared bible">Leave</button>`
+              }
             </div>`
             )
             .join('')}
@@ -298,6 +350,13 @@
       btn.onclick = async () => {
         if (!confirm(`Delete "${btn.dataset.title}" and everything in it? This cannot be undone.`)) return;
         await api('DELETE', `/api/bibles/${btn.dataset.delete}`);
+        renderHome();
+      };
+    });
+    $$('[data-leave]').forEach((btn) => {
+      btn.onclick = async () => {
+        if (!confirm(`Leave "${btn.dataset.title}"? You will lose access until the owner shares it again.`)) return;
+        await window.SBCollab.leave(btn.dataset.leave);
         renderHome();
       };
     });
@@ -556,8 +615,11 @@
         <input class="page-title-input" id="page-title" value="${esc(page.title)}" maxlength="200" aria-label="Page title">
         <div class="page-meta">
           <span>Tip: select text and press <b>§ Link</b> to link it to any section, page or heading.</span>
+          <span class="last-edit" id="last-edit">${page.updatedBy ? `Last edited by ${esc(page.updatedBy)}` : ''}</span>
           <button class="btn small danger" id="page-delete">Delete page</button>
         </div>
+        <div class="page-presence" id="page-presence" hidden></div>
+        <div class="conflict" id="conflict" hidden></div>
         <div id="toolbar">
           <span class="ql-formats">
             <select class="ql-header"><option value="1">Heading 1</option><option value="2">Heading 2</option><option value="3">Heading 3</option><option selected>Body</option></select>
@@ -795,6 +857,128 @@
     }
   });
 
+  // ---------- Collaboration ----------
+  // Loads a page version from the server into the open editor without saving it back.
+  function loadIntoEditor(page, fresh) {
+    Object.assign(page, fresh);
+    if (!state.quill || state.pageId !== page.id) return;
+    const sel = state.quill.getSelection();
+    state.quill.setContents([], 'silent');
+    state.quill.clipboard.dangerouslyPasteHTML(page.content || '', 'silent');
+    if (sel) state.quill.setSelection(Math.min(sel.index, state.quill.getLength() - 1), 0, 'silent');
+    const title = $('#page-title');
+    if (title && document.activeElement !== title) title.value = page.title;
+    const last = $('#last-edit');
+    if (last) last.textContent = page.updatedBy ? `Last edited by ${page.updatedBy}` : '';
+    renderOutline();
+  }
+
+  // Someone else saved this page after we loaded it: let the person choose a version.
+  function showConflict(pid, theirs) {
+    const box = $('#conflict');
+    const found = findPage(pid);
+    if (!box || !found || state.pageId !== pid) return;
+    box.hidden = false;
+    box.innerHTML = `
+      <p><b>${esc(theirs.updatedBy || 'Someone')}</b> saved changes to this page while you were editing, so your latest changes are not saved yet.</p>
+      <button class="btn small primary" id="keep-mine">Keep my version</button>
+      <button class="btn small" id="take-theirs">Load their version</button>`;
+    const done = () => {
+      box.hidden = true;
+      saver.conflict = null;
+    };
+    $('#keep-mine').onclick = () => {
+      done();
+      found.page.rev = theirs.rev;
+      saver.queue(pid, { content: state.quill.root.innerHTML, title: found.page.title }, 0);
+    };
+    $('#take-theirs').onclick = async () => {
+      const mine = state.quill.getText();
+      done();
+      saver.pending = null;
+      loadIntoEditor(found.page, theirs);
+      renderSidebar();
+      renderCrumbs();
+      saver.status('Saved');
+      try {
+        await navigator.clipboard.writeText(mine);
+        toast('Loaded their version. Your text is on the clipboard.');
+      } catch (_) {
+        toast('Loaded their version.');
+      }
+    };
+  }
+
+  // Re-reads the bible after someone else changed it, keeping the open editor intact.
+  async function refreshBible() {
+    const old = state.bible;
+    const fresh = await api('GET', `/api/bibles/${old.id}`);
+    if (state.bible !== old) return;
+    const pid = state.pageId;
+    const openOld = pid && findPage(pid);
+    state.bible = fresh;
+    if (openOld) {
+      const now = findPage(pid);
+      if (!now) {
+        if (saver.busyWith(pid)) {
+          state.bible = old; // keep our copy so the person can still copy their text out
+          return toast('A collaborator deleted this page. Your latest changes cannot be saved.');
+        }
+        toast('A collaborator deleted this page.');
+        location.hash = link.section(fresh.id, openOld.section.id);
+        return;
+      }
+      // The editor closures hold the old page object; keep using it.
+      now.section.pages[now.section.pages.indexOf(now.page)] = openOld.page;
+      if (!saver.busyWith(pid) && (now.page.rev || 0) !== (openOld.page.rev || 0)) {
+        loadIntoEditor(openOld.page, now.page);
+        toast(`${now.page.updatedBy || 'A collaborator'} updated this page.`);
+      } else if (!saver.busyWith(pid)) {
+        Object.assign(openOld.page, { ...now.page, content: openOld.page.content });
+      }
+    }
+    const focus = document.activeElement;
+    const focusId = focus && focus.id;
+    const caret = focus && 'selectionStart' in focus ? focus.selectionStart : null;
+    if (!$('.dragging', els.sidebar)) renderSidebar();
+    renderCrumbs();
+    const r = state.route;
+    const typing = focus && els.main.contains(focus) && /^(INPUT|TEXTAREA)$/.test(focus.tagName);
+    if (!typing && r.name === 'section') renderSection(r.sid);
+    if (!typing && r.name === 'bible') renderOverview();
+    if (r.name === 'page') renderOutline();
+    const back = focusId && document.getElementById(focusId);
+    if (back && back !== focus) {
+      back.focus();
+      if (caret !== null) back.setSelectionRange(caret, caret);
+    }
+  }
+
+  // Every few seconds: report where we are, see who else is here, and pick up their changes.
+  async function poll() {
+    const b = state.bible;
+    if (!b || document.visibilityState !== 'visible' || !window.SBCollab.user) return;
+    let act;
+    try {
+      act = await api('GET', `/api/bibles/${b.id}/activity${state.pageId ? `?page=${state.pageId}` : ''}`);
+    } catch (err) {
+      if (err.status === 404 && state.bible === b) {
+        state.bible = null;
+        toast('This bible was deleted or is no longer shared with you.');
+        location.hash = '#/';
+      }
+      return;
+    }
+    if (state.bible !== b) return;
+    window.SBCollab.renderPresence(act.viewers, state.pageId);
+    const known = state.sig;
+    state.sig = act.sig;
+    const changed = b.sections.some((s) => s.pages.some((p) => act.pages[p.id] && act.pages[p.id].rev !== (p.rev || 0)));
+    if (changed || (known && known !== act.sig)) await refreshBible().catch(() => {});
+  }
+  setInterval(poll, 4000);
+  document.addEventListener('visibilitychange', poll);
+
   function debounce(fn, ms) {
     let t;
     return (...args) => {
@@ -803,5 +987,5 @@
     };
   }
 
-  route();
+  window.SBCollab.start(route);
 })();
