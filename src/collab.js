@@ -140,7 +140,7 @@ const presence = new Map(); // bibleId -> Map(userId -> { pageId, at })
 const PRESENCE_MS = 20e3;
 
 function structureSig(bible) {
-  const shape = bible.sections.map((s) => [s.id, s.name, s.pages.map((p) => [p.id, p.title])]);
+  const shape = bible.sections.map((s) => [s.id, s.name, s.pages.map((p) => [p.id, p.title, p.leadImage || null])]);
   return crypto.createHash('sha1').update(JSON.stringify([bible.title, bible.logline, shape])).digest('hex').slice(0, 16);
 }
 

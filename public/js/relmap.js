@@ -301,7 +301,7 @@
     }
 
     const markers = TYPES.map((t) => `<marker id="rm-end-${t.key}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:${t.color}"/></marker>`).join('');
-    svg.innerHTML = `<defs>${markers}</defs><g class="rm-view"><g class="rm-edges"></g><g class="rm-nodes"></g></g>`;
+    svg.innerHTML = `<defs>${markers}<clipPath id="rm-face"><circle r="${R - 1}"/></clipPath></defs><g class="rm-view"><g class="rm-edges"></g><g class="rm-nodes"></g></g>`;
     const edgesG = svg.querySelector('.rm-edges');
     const nodesG = svg.querySelector('.rm-nodes');
 
@@ -329,7 +329,9 @@
           return `<g class="rm-node ${isChar ? '' : 'other'}" data-pid="${x.id}" transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})" tabindex="0" role="link" aria-label="Open ${esc(x.page.title)}">
             <title>${esc(x.page.title)}${isChar ? '' : ` (${esc(x.section.name)})`}</title>
             <circle r="${R}"/>
-            <text class="rm-initials" y="5">${esc(initials(x.page.title))}</text>
+            ${x.page.leadImage
+              ? `<image class="rm-face" href="${window.SBImages.thumb(b.id, x.page.leadImage)}" x="${-R}" y="${-R}" width="${2 * R}" height="${2 * R}" preserveAspectRatio="xMidYMid slice" clip-path="url(#rm-face)"/>`
+              : `<text class="rm-initials" y="5">${esc(initials(x.page.title))}</text>`}
             <text class="rm-name" y="${R + 17}">${esc(x.page.title.length > 24 ? x.page.title.slice(0, 23) + '…' : x.page.title)}</text>
           </g>`;
         })

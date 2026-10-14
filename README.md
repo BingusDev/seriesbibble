@@ -13,6 +13,8 @@ An application designed to help you keep your Series Bible organized when writin
 - **Working together**: you can see who else has a bible open and who is on the same page. Changes other people save show up within a few seconds. If two people edit the same page at once, the second save is refused instead of silently overwriting the first, and that person picks **Keep my version** or **Load their version**.
 - **Page history**: press **History** on any page to see earlier versions and restore one. A version is kept every 10 minutes while you write and whenever someone else starts editing the page; the last 50 per page are kept. Restoring keeps the text it replaced as a version too.
 - **Trash**: deleting a page (or a whole section) moves its pages to the bible's **Trash**, at the bottom of the sidebar. Restore puts a page back in its old section and place, with its relationships, so links to it work again. Pages are removed for good after 30 days, or straight away with **Delete forever** or **Empty trash**.
+- **Pictures**: add a picture to a page with the toolbar's picture button, or paste or drop one in. Each page can also have a page picture (a character's face, a location reference) beside its title, which shows in the sidebar, on overview cards and on the relationship map. Click a picture in the page to use it as the page picture. Large pictures are shrunk to 2000px on the server; they are stored in `images/` in the data directory and kept while any page, trashed page or page version still uses them.
+- **Exports** include the pictures and a Relationships chapter with the map drawn as a diagram plus a list of every relationship.
 - Autosaves as you type. Everything is stored as JSON files in the data volume, with no external services.
 
 ## Run with Docker
@@ -30,7 +32,7 @@ docker build -t series-bible .
 docker run -d -p 3000:3000 -v series-bible-data:/data --name series-bible series-bible
 ```
 
-To back up, either use **Export → Backup (.json)** per bible, or copy the volume: `docker run --rm -v series-bible_bible-data:/data -v "$PWD":/backup alpine tar czf /backup/bibles.tgz -C /data .`
+To back up, copy the whole volume (the JSON backup per bible does not include pictures, history or trash): `docker run --rm -v series-bible_bible-data:/data -v "$PWD":/backup alpine tar czf /backup/bibles.tgz -C /data .`
 
 ## Accounts
 

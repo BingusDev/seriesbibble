@@ -3,6 +3,8 @@ const fs = require('fs');
 const HTMLtoDOCX = require('html-to-docx');
 const JSZip = require('jszip');
 const { slugify } = require('../public/js/slug');
+const images = require('./images');
+const relmap = require('./relmap-export');
 
 const esc = (s) =>
   String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -35,10 +37,49 @@ function normalizeLists(html) {
   });
 }
 
+// The printable area of a Letter page with 1in margins, in CSS pixels.
+const PAGE_W = 624;
+const PAGE_H = 816;
+
+// Width and height that fit a picture inside a box without enlarging it.
+function fit(w, h, maxW, maxH) {
+  const scale = Math.min(1, maxW / w, maxH / h);
+  return { width: Math.round(w * scale), height: Math.round(h * scale) };
+}
+
+// Word reads a picture's size from its style, browsers from the attributes; give both.
+const sized = (size) => `width="${size.width}" height="${size.height}" style="width:${size.width}px;height:${size.height}px"`;
+
+// Page pictures are served from behind sign-in, so the exporter embeds them as data: URLs with
+// a size that fits the page. Pictures from the web stay links for PDF; Word cannot fetch them.
+function prepareImages(html, bible, assets, forWord) {
+  return html.replace(/<img\b([^>]*)>/g, (tag, attrs) => {
+    const src = (attrs.match(/\ssrc="([^"]*)"/) || [])[1] || '';
+    const local = src.match(/^\/api\/bibles\/([a-f0-9]{12})\/images\/([a-f0-9]{12}\.(?:jpg|png))$/);
+    const alt = (attrs.match(/\salt="([^"]*)"/) || [])[1] || '';
+    if (local) {
+      const img = local[1] === bible.id && assets.images && assets.images.get(local[2]);
+      if (!img) return '';
+      const size = fit(img.width, img.height, PAGE_W, PAGE_H * 0.5);
+      return `<img src="${img.src}" alt="${alt}" ${sized(size)}>`;
+    }
+    if (forWord || !/^https?:\/\//.test(src)) return '';
+    return `<img src="${src}" alt="${alt}">`;
+  });
+}
+
+function leadImageHtml(page, assets) {
+  const img = page.leadImage && assets.images && assets.images.get(page.leadImage);
+  if (!img) return '';
+  const size = fit(img.width, img.height, 220, 280);
+  return `<p class="lead-image"><img src="${img.src}" alt="${esc(page.title)}" ${sized(size)}></p>`;
+}
+
 // Gives every heading an id and rewrites in-app links (#/b/:bid/p/:pid[/h/:slug]) to document anchors.
-function preparePageHtml(page, bible) {
+function preparePageHtml(page, bible, assets = {}, forWord = false) {
   let html = page.content || '';
   html = html.replace(/<span class="ql-ui"[^>]*><\/span>/g, '');
+  html = prepareImages(html, bible, assets, forWord);
   html = normalizeLists(html);
   const seen = {};
   html = html.replace(/<h([1-3])([^>]*)>([\s\S]*?)<\/h\1>/g, (_, level, attrs, inner) => {
@@ -115,9 +156,37 @@ const STYLES = `
   .page-body h5 { font-size: 12pt; }
   a { color: #1a4fa0; }
   blockquote { border-left: 3px solid #999; margin-left: 0; padding-left: 10pt; color: #444; }
+  img { max-width: 100%; height: auto; page-break-inside: avoid; }
+  .lead-image { float: right; margin: 0 0 10pt 16pt; }
+  .lead-image img { border: 1px solid #ccc; }
+  .page-body { clear: none; }
+  .page-title { clear: both; }
+  .rel-map { text-align: center; page-break-inside: avoid; }
+  .rel-map svg { max-width: 100%; max-height: 8in; height: auto; }
+  .rel-name { font-size: 13pt; margin-bottom: 4pt; }
+  .rel-list { margin-top: 0; }
+  .rel-list small { color: #666; }
 `;
 
-function buildHtml(bible, { forWord = false } = {}) {
+const MAP_ANCHOR = 'relationship-map';
+
+// The relationship map chapter: the diagram, then every relationship as a list.
+function mapChapter(bible, assets, forWord) {
+  const list = relmap.listHtml(bible, pageAnchor);
+  if (!list) return '';
+  let picture = '';
+  const map = assets.map;
+  if (map && forWord && map.png) {
+    const size = fit(map.width, map.height, PAGE_W, PAGE_H * 0.85);
+    picture = `<p class="rel-map"><img src="${map.png}" alt="Relationship map" ${sized(size)}></p>`;
+  } else if (map && !forWord && map.svg) {
+    picture = `<div class="rel-map">${map.svg}</div>`;
+  }
+  return `<h1 class="section-title" id="${MAP_ANCHOR}">Relationships</h1>${picture}${list}`;
+}
+
+function buildHtml(bible, { forWord = false, assets = {} } = {}) {
+  const chapter = mapChapter(bible, assets, forWord);
   const toc = bible.sections
     .map(
       (s) =>
@@ -127,7 +196,7 @@ function buildHtml(bible, { forWord = false } = {}) {
           : '') +
         '</li>'
     )
-    .join('');
+    .join('') + (chapter ? `<li><a href="#${MAP_ANCHOR}">Relationships</a></li>` : '');
 
   const body = bible.sections
     .map(
@@ -137,11 +206,12 @@ function buildHtml(bible, { forWord = false } = {}) {
           .map(
             (p) =>
               `<h2 class="page-title" id="${pageAnchor(p.id)}">${esc(p.title)}</h2>` +
-              `<div class="page-body">${preparePageHtml(p, bible)}</div>`
+              leadImageHtml(p, assets) +
+              `<div class="page-body">${preparePageHtml(p, bible, assets, forWord)}</div>`
           )
           .join('')
     )
-    .join('');
+    .join('') + chapter;
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(bible.title)}</title>
 <style>${forWord ? '' : STYLES}</style></head><body>
@@ -149,6 +219,47 @@ function buildHtml(bible, { forWord = false } = {}) {
 <div class="toc"><h1>Contents</h1><ul>${toc}</ul></div>
 ${retargetMissing(body)}
 </body></html>`;
+}
+
+// Reads every picture the bible's pages show and draws the relationship map, ready to embed.
+async function loadAssets(bible, { forWord = false } = {}) {
+  const files = new Set();
+  for (const s of bible.sections) {
+    for (const p of s.pages) {
+      for (const f of images.filesIn(bible.id, p.content)) files.add(f);
+      if (p.leadImage) files.add(p.leadImage);
+    }
+  }
+  const loaded = new Map();
+  for (const file of files) {
+    if (!images.exists(bible.id, file)) continue;
+    try {
+      const { width, height } = await images.dimensions(bible.id, file);
+      const type = file.endsWith('.png') ? 'image/png' : 'image/jpeg';
+      const data = fs.readFileSync(images.fileFor(bible.id, file)).toString('base64');
+      loaded.set(file, { src: `data:${type};base64,${data}`, width, height });
+    } catch (err) {
+      console.error(`Could not read picture ${file}`, err.message);
+    }
+  }
+  const assets = { images: loaded };
+  const portrait = (page) => {
+    const img = page.leadImage && loaded.get(page.leadImage);
+    return img ? img.src : null;
+  };
+  const drawn = relmap.toSvg(bible, { portrait });
+  if (drawn) {
+    assets.map = { svg: drawn.svg, width: drawn.width, height: drawn.height };
+    if (forWord) {
+      try {
+        const png = await require('sharp')(Buffer.from(drawn.svg), { density: 192 }).png().toBuffer();
+        assets.map.png = `data:image/png;base64,${png.toString('base64')}`;
+      } catch (err) {
+        console.error('Could not draw the relationship map for Word', err.message);
+      }
+    }
+  }
+  return assets;
 }
 
 const CHROME_CANDIDATES = [
@@ -170,7 +281,7 @@ async function toPdf(bible) {
   });
   try {
     const page = await browser.newPage();
-    await page.setContent(buildHtml(bible), { waitUntil: 'load' });
+    await page.setContent(buildHtml(bible, { assets: await loadAssets(bible) }), { waitUntil: 'load' });
     return Buffer.from(
       await page.pdf({
         format: 'Letter',
@@ -194,7 +305,7 @@ async function toPdf(bible) {
 const MARK = (id) => `[[BM:${id}]]`;
 
 async function toDocx(bible) {
-  let html = buildHtml(bible, { forWord: true });
+  let html = buildHtml(bible, { forWord: true, assets: await loadAssets(bible, { forWord: true }) });
   html = html.replace(/<(h[1-6])([^>]*?)\sid="([^"]+)"([^>]*)>/g, (_, tag, a, id, b) => `<${tag}${a}${b}>${MARK(id)}`);
   html = html.replace(/<div class="title-page">/, '<div class="title-page" style="text-align:center">');
   html = html.replace(/<div class="toc">/, '<div class="toc" style="page-break-before:always">');
@@ -236,4 +347,4 @@ async function toDocx(bible) {
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
-module.exports = { buildHtml, toPdf, toDocx, preparePageHtml };
+module.exports = { buildHtml, loadAssets, toPdf, toDocx, preparePageHtml };

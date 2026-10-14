@@ -109,6 +109,12 @@
     return text.length > n ? text.slice(0, n) + '…' : text;
   }
 
+  // A page's card on the bible and section overviews, with its picture when it has one.
+  function cardHtml(p) {
+    const pic = p.leadImage ? `<img class="card-img" src="${SBImages.thumb(state.bible.id, p.leadImage)}" alt="" loading="lazy">` : '';
+    return `<a class="card ${pic ? 'has-img' : ''}" href="${link.page(state.bible.id, p.id)}">${pic}<strong>${esc(p.title)}</strong><span>${esc(excerpt(p.content)) || '<em>Empty</em>'}</span></a>`;
+  }
+
   function toast(msg) {
     els.toast.textContent = msg;
     els.toast.hidden = false;
@@ -364,6 +370,7 @@
     els.rightbar.hidden = true;
     state.quill = null;
     state.pageId = null;
+    state.drawLead = null;
     renderTopbar();
     els.crumbs.innerHTML = '';
     document.title = 'Series Bible';
@@ -451,7 +458,7 @@
             ${pages
               .map(
                 (p) => `<li draggable="true" data-pid="${p.id}" class="${r.pid === p.id ? 'active' : ''}">
-                  <a href="${link.page(b.id, p.id)}">${esc(p.title)}</a></li>`
+                  <a href="${link.page(b.id, p.id)}">${p.leadImage ? `<img class="page-thumb" src="${SBImages.thumb(b.id, p.leadImage)}" alt="" loading="lazy">` : ''}<span>${esc(p.title)}</span></a></li>`
               )
               .join('') || `<li class="empty">${q ? 'No matches' : 'No pages yet'}</li>`}
           </ul>
@@ -640,9 +647,7 @@
             <h2><a href="${link.section(b.id, s.id)}">${esc(s.name)}</a><span class="count">${s.pages.length} ${s.pages.length === 1 ? 'page' : 'pages'}</span></h2>
             <div class="cards">
               ${s.pages
-                .map(
-                  (p) => `<a class="card" href="${link.page(b.id, p.id)}"><strong>${esc(p.title)}</strong><span>${esc(excerpt(p.content)) || '<em>Empty</em>'}</span></a>`
-                )
+                .map(cardHtml)
                 .join('')}
               <button class="card add" data-add-page="${s.id}">＋ Add to ${esc(s.name)}</button>
             </div>
@@ -693,9 +698,7 @@
         </div>
         <div class="cards">
           ${s.pages
-            .map(
-              (p) => `<a class="card" href="${link.page(b.id, p.id)}"><strong>${esc(p.title)}</strong><span>${esc(excerpt(p.content)) || '<em>Empty</em>'}</span></a>`
-            )
+            .map(cardHtml)
             .join('')}
           <button class="card add" id="sec-add">＋ Add to ${esc(s.name)}</button>
         </div>
@@ -822,8 +825,13 @@
     document.title = `${page.title} · ${b.title}`;
     els.main.innerHTML = `
       <div class="sheet editor-wrap" style="${tab(section)}">
-        <a class="eyebrow" href="${link.section(b.id, section.id)}">${esc(section.name)}</a>
-        <input class="page-title-input" id="page-title" value="${esc(page.title)}" maxlength="200" aria-label="Page title">
+        <div class="page-head">
+          <div class="page-head-text">
+            <a class="eyebrow" href="${link.section(b.id, section.id)}">${esc(section.name)}</a>
+            <input class="page-title-input" id="page-title" value="${esc(page.title)}" maxlength="200" aria-label="Page title">
+          </div>
+          <div class="lead-slot" id="lead-slot"></div>
+        </div>
         <div class="page-meta">
           <span>Tip: select text and press <b>§ Link</b> to link it to any section, page or heading.</span>
           <span class="last-edit" id="last-edit">${page.updatedBy ? `Last edited by ${esc(page.updatedBy)}` : ''}</span>
@@ -841,7 +849,7 @@
           <span class="ql-formats"><button class="ql-bold"></button><button class="ql-italic"></button><button class="ql-underline"></button><button class="ql-strike"></button></span>
           <span class="ql-formats"><button class="ql-list" value="ordered"></button><button class="ql-list" value="bullet"></button><button class="ql-blockquote"></button></span>
           <span class="ql-formats"><button class="ql-align" value=""></button><button class="ql-align" value="center"></button></span>
-          <span class="ql-formats"><button class="ql-link" title="Web link"></button><button class="ql-xref" title="Link to a section, page or heading in this bible (Ctrl+L)">§ Link</button></span>
+          <span class="ql-formats"><button class="ql-image" title="Add a picture (or paste or drop one in)"></button><button class="ql-link" title="Web link"></button><button class="ql-xref" title="Link to a section, page or heading in this bible (Ctrl+L)">§ Link</button></span>
           <span class="ql-formats"><button class="ql-clean"></button></span>
         </div>
         <div id="editor"></div>
@@ -854,6 +862,7 @@
       formats: EDITOR_FORMATS,
       modules: {
         toolbar: { container: '#toolbar', handlers: { xref: () => openPicker('link') } },
+        uploader: SBImages.uploaderFor(() => state.bible, toast),
         keyboard: {
           bindings: {
             xref: { key: 'l', shortKey: true, handler: () => { openPicker('link'); return false; } },
@@ -867,6 +876,7 @@
       for (const op of delta.ops) if (op.attributes && op.attributes.header > 3) op.attributes.header = 3;
       return delta;
     });
+    quill.clipboard.addMatcher('IMG', SBImages.dropUnreachable);
     quill.clipboard.dangerouslyPasteHTML(page.content || '');
     quill.history.clear();
     state.quill = quill;
@@ -881,6 +891,7 @@
       refreshPrompts();
       refreshCount();
       if (source !== 'user') return;
+      if (quill.root.querySelector('img[src^="data:"]')) SBImages.adoptPasted(quill, b.id, toast);
       page.content = quill.root.innerHTML;
       saver.queue(pid, { content: page.content });
       renderOutline();
@@ -912,7 +923,7 @@
       if (!t) return;
       page.title = t;
       saver.queue(pid, { title: t });
-      const li = $(`.pages li[data-pid="${pid}"] a`, els.sidebar);
+      const li = $(`.pages li[data-pid="${pid}"] a span`, els.sidebar);
       if (li) li.textContent = t;
       renderCrumbs();
       document.title = `${t} · ${b.title}`;
@@ -923,6 +934,19 @@
         caretToBody(quill);
       }
     };
+    const leadSlot = $('#lead-slot');
+    const setLead = (file) => {
+      if (file) page.leadImage = file;
+      else delete page.leadImage;
+      saver.queue(pid, { leadImage: file || null }, 0);
+      drawLead();
+      renderSidebar();
+      toast(file ? 'Page picture set' : 'Page picture removed');
+    };
+    const drawLead = () => SBImages.renderLead(leadSlot, { bible: b, page, save: setLead, toast });
+    drawLead();
+    state.drawLead = drawLead;
+    SBImages.pictureMenu(quill, { bible: b, onUse: setLead });
     $('#focus-btn').onclick = () => setFocusMode(!document.body.classList.contains('focus-mode'));
     $('#focus-exit').onclick = () => setFocusMode(false);
     setFocusMode(document.body.classList.contains('focus-mode'));
@@ -1284,6 +1308,11 @@
         toast(`${now.page.updatedBy || 'A collaborator'} updated this page.`);
       } else if (!saver.busyWith(pid)) {
         Object.assign(openOld.page, { ...now.page, content: openOld.page.content });
+      }
+      if (!saver.busyWith(pid)) {
+        if (now.page.leadImage) openOld.page.leadImage = now.page.leadImage;
+        else delete openOld.page.leadImage;
+        if (state.drawLead) state.drawLead();
       }
     }
     const focus = document.activeElement;

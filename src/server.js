@@ -6,6 +6,7 @@ const { toDocx, toPdf } = require('./export');
 const relationships = require('./relationships');
 const collab = require('./collab');
 const history = require('./history');
+const images = require('./images');
 
 const app = express();
 // Only proxies named in TRUST_PROXY may set X-Forwarded-For/-Proto (Express syntax,
@@ -58,6 +59,7 @@ app.patch('/api/bibles/:id', withBible((req, res, bible) => {
 app.delete('/api/bibles/:id', (req, res) => {
   store.remove(req.params.id);
   history.removeBible(req.params.id);
+  images.removeBible(req.params.id);
   res.status(204).end();
 });
 
@@ -103,7 +105,19 @@ app.post('/api/bibles/:id/sections/:sid/pages', withBible((req, res, bible) => {
   res.status(201).json(page);
 }));
 
-app.patch('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
+// Pictures pasted into a page as data: URLs, or copied from another bible, become this bible's
+// own files before the page is saved. Done before the bible is read so the save never races.
+async function adoptPageImages(req, res, next) {
+  if (!req.bible || !req.body || typeof req.body.content !== 'string') return next();
+  const canRead = (bid) => {
+    const other = store.read(bid);
+    return !!other && collab.canAccess(req.user, other);
+  };
+  req.body.content = await images.adoptImages(req.bible.id, req.body.content, canRead);
+  next();
+}
+
+app.patch('/api/bibles/:id/pages/:pid', adoptPageImages, withBible((req, res, bible) => {
   const found = store.findPage(bible, req.params.pid);
   if (!found) return res.status(404).json({ error: 'Page not found' });
   const { page, section } = found;
@@ -120,6 +134,14 @@ app.patch('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
     if (!target) return res.status(400).json({ error: 'Target section not found' });
     section.pages.splice(section.pages.indexOf(page), 1);
     target.pages.push(page);
+  }
+  // The lead image is the page's picture in the sidebar, on overview cards and atop it in exports.
+  if (req.body.leadImage === null) delete page.leadImage;
+  else if (req.body.leadImage !== undefined) {
+    if (!images.validFile(req.body.leadImage) || !images.exists(bible.id, req.body.leadImage)) {
+      return res.status(400).json({ error: 'That picture is not in this bible' });
+    }
+    page.leadImage = req.body.leadImage;
   }
   if (Number.isInteger(req.body.position)) {
     const owner = bible.sections.find((s) => s.pages.includes(page));
@@ -142,6 +164,9 @@ app.delete('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
   store.write(bible);
   res.status(204).end();
 }));
+
+// Pictures on pages
+app.use(images.router);
 
 // Character relationship map
 app.use(relationships.router);
