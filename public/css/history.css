@@ -1,0 +1,53 @@
+/* Page history and the trash. Colours come from the tokens in app.css so night draft works. */
+
+/* History dialog */
+.history-modal { width: min(980px, 94vw); max-height: 86vh; height: 86vh; }
+.history-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px 1fr; border-top: 1px solid var(--line); }
+.history-list { list-style: none; margin: 0; padding: 8px; overflow-y: auto; border-right: 1px solid var(--line); background: var(--chrome); }
+.history-list li { padding: 8px 10px; border-radius: 7px; cursor: pointer; border-left: 3px solid transparent; }
+.history-list li:hover { background: var(--sel); }
+.history-list li:focus-visible { outline: 2px solid var(--link); outline-offset: -2px; }
+.history-list li[aria-selected="true"] { background: var(--accent-soft); border-left-color: var(--accent); }
+.history-list strong { display: block; font-size: 13px; font-weight: 600; color: var(--ink); }
+.history-list small { display: block; margin-top: 2px; color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.history-view { overflow-y: auto; padding: 22px 34px 30px; background: var(--paper); }
+.history-title { margin: 0 0 6px; font-family: var(--serif); font-weight: 650; font-size: 24px; color: var(--ink); }
+.history-preview .ql-container { font-family: var(--serif); font-size: 15px; color: var(--ink); border: 0; }
+.history-preview .ql-editor { padding: 8px 0 0; line-height: 1.7; max-width: 68ch; }
+.history-preview .ql-editor h1, .history-preview .ql-editor h2, .history-preview .ql-editor h3 { font-family: var(--serif); font-weight: 650; line-height: 1.3; }
+.history-preview .ql-editor h2 { font-size: 1.35em; margin-top: 1.3em; }
+.history-preview .ql-editor h3 { font-family: var(--mono); font-weight: 700; font-size: .82em; text-transform: uppercase; letter-spacing: .1em; margin-top: 1.3em; }
+.history-preview .ql-editor a { color: var(--link); }
+.history-foot { align-items: center; }
+.history-hint { flex: 1; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+
+/* Sidebar link */
+.side-trash { display: block; margin: 10px 14px 18px; padding: 6px 8px; border-radius: 7px; color: var(--muted); text-decoration: none; font-size: 13px; }
+.side-trash::before { content: '🗑'; margin-right: 7px; filter: grayscale(1); opacity: .7; }
+.side-trash:hover { background: var(--sel); color: var(--ink); }
+.side-trash.active { background: var(--accent-soft); color: var(--accent); }
+
+/* Trash page */
+.trash-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.trash-head .eyebrow { margin: 0; color: var(--muted); }
+.trash-head h1 { font-family: var(--serif); font-weight: 650; margin: 4px 0 0; }
+.trash-lede { color: var(--muted); line-height: 1.5; margin: 10px 0 22px; }
+.trash-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.trash-list li { display: flex; gap: 16px; align-items: flex-start; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.trash-info { flex: 1; min-width: 0; }
+.trash-info strong { font-family: var(--serif); font-weight: 650; font-size: 16px; color: var(--ink); }
+.trash-info small { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+.trash-info p { margin: 6px 0 0; color: var(--ink-soft); font-size: 13px; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.trash-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.trash-actions a.btn { text-decoration: none; }
+.trash-list li.restored { opacity: .7; }
+.trash-none, .trash-loading { color: var(--muted); font-style: italic; }
+
+@media (max-width: 760px) {
+  .history-body { grid-template-columns: 1fr; grid-template-rows: 38% 1fr; }
+  .history-list { border-right: 0; border-bottom: 1px solid var(--line); }
+  .history-view { padding: 16px 18px 24px; }
+  .history-foot { flex-wrap: wrap; }
+  .history-hint { flex-basis: 100%; }
+  .trash-list li { flex-direction: column; gap: 8px; }
+}
