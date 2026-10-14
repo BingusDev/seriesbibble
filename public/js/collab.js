@@ -130,6 +130,7 @@
         <div class="menu">
           <button class="btn account-btn" id="account-btn" title="Signed in as ${esc(u.username)}">${avatar(u)}<span>${esc(u.displayName)}</span></button>
           <div class="menu-list" id="account-menu" hidden>
+            <button id="acct-keys">Keyboard shortcuts<small>Or press ? anywhere</small></button>
             <button id="acct-password">Change password<small>Signs out your other devices</small></button>
             <button id="acct-logout">Sign out<small>Signed in as ${esc(u.username)}</small></button>
           </div>
@@ -146,6 +147,7 @@
         this.signedOut();
       };
       $('#acct-password').onclick = () => this.openPassword();
+      $('#acct-keys').onclick = () => window.SBApp && window.SBApp.showShortcuts();
     },
 
     // Shows who else has this bible open; on a page, also who is on the same page.
@@ -238,7 +240,15 @@
         el.querySelectorAll('[data-remove]').forEach((btn) => {
           btn.onclick = async () => {
             const self = btn.dataset.remove === this.user.id;
-            if (self && !confirm(`Leave “${bible.title}”? You will lose access until the owner shares it again.`)) return;
+            if (
+              self &&
+              !(await window.SBDialog.confirm({
+                title: 'Leave this bible?',
+                message: `You will stop seeing “${bible.title}” until its owner shares it with you again.`,
+                confirmLabel: 'Leave',
+                danger: true,
+              }))
+            ) return;
             try {
               const next = await call('DELETE', `/api/bibles/${bible.id}/sharing/${btn.dataset.remove}`);
               if (self) {

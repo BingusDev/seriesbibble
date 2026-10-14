@@ -63,6 +63,9 @@
     try { localStorage.setItem('sb.collapsed', JSON.stringify(state.collapsed)); } catch (_) { /* ignore */ }
   }
 
+  const oneLine = (text) => text.replace(/\s*\n\s*/g, ' ').trim();
+  const KEYS = { mod: /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl' };
+
   const link = {
     bible: (bid) => `#/b/${bid}`,
     section: (bid, sid) => `#/b/${bid}/s/${sid}`,
@@ -105,6 +108,7 @@
   function excerpt(html, n = 160) {
     const doc = new DOMParser().parseFromString(html || '', 'text/html');
     $$('h1, h2, h3', doc.body).forEach((h) => h.remove());
+    $$('p, li, blockquote', doc.body).forEach((el) => el.append(' ')); // keeps paragraphs from running together
     const text = doc.body.textContent.replace(/\s+/g, ' ').trim();
     return text.length > n ? text.slice(0, n) + '…' : text;
   }
@@ -115,11 +119,21 @@
     return `<a class="card ${pic ? 'has-img' : ''}" href="${link.page(state.bible.id, p.id)}">${pic}<strong>${esc(p.title)}</strong><span>${esc(excerpt(p.content)) || '<em>Empty</em>'}</span></a>`;
   }
 
-  function toast(msg) {
-    els.toast.textContent = msg;
+  // A short message at the bottom of the screen; with an action (like Undo) it stays a little longer.
+  function toast(msg, action) {
+    els.toast.innerHTML = `<span>${esc(msg)}</span>${action ? `<button type="button" class="toast-action">${esc(action.label)}</button>` : ''}`;
+    if (action) {
+      $('.toast-action', els.toast).onclick = () => {
+        els.toast.hidden = true;
+        action.run();
+      };
+    }
     els.toast.hidden = false;
+    els.toast.classList.remove('show');
+    void els.toast.offsetWidth;
+    els.toast.classList.add('show');
     clearTimeout(toast.t);
-    toast.t = setTimeout(() => (els.toast.hidden = true), 2600);
+    toast.t = setTimeout(() => (els.toast.hidden = true), action ? 6000 : 2600);
   }
 
   // ---------- Saving ----------
@@ -215,9 +229,12 @@
     if (r.name === 'home') {
       setFocusMode(false);
       state.bible = null;
-      return renderHome();
+      await renderHome();
+      return settle();
     }
     if (!state.bible || state.bible.id !== r.bid) {
+      // Only a slow load shows the loading note, so quick ones don't flash.
+      const slow = setTimeout(showLoading, 180);
       try {
         state.bible = await api('GET', `/api/bibles/${r.bid}`);
         state.sig = null;
@@ -226,6 +243,8 @@
         toast('That series bible could not be found.');
         location.hash = '#/';
         return;
+      } finally {
+        clearTimeout(slow);
       }
     }
     renderSidebar();
@@ -238,26 +257,41 @@
         renderCrumbs();
         return;
       }
-      return renderPage(r.pid, r.slug);
-    }
-    if (r.name === 'section') return renderSection(r.sid);
-    if (r.name === 'map') {
+      renderPage(r.pid, r.slug);
+    } else if (r.name === 'section') {
+      renderSection(r.sid);
+    } else if (r.name === 'map') {
       teardownEditor();
-      return RelMap.render(relCtx());
-    }
-    if (r.name === 'trash') {
+      await RelMap.render(relCtx());
+    } else if (r.name === 'trash') {
       teardownEditor();
       els.rightbar.hidden = true;
-      return SBHistory.renderTrash(historyCtx());
+      await SBHistory.renderTrash(historyCtx());
+    } else {
+      renderOverview();
     }
-    return renderOverview();
+    settle();
   }
   window.addEventListener('hashchange', route);
+
+  function showLoading() {
+    els.main.innerHTML = '<div class="loading" aria-live="polite"><span class="brand-mark" aria-hidden="true">§</span><span>Opening your binder…</span></div>';
+  }
+
+  // Each new view eases in. The class comes off again so later re-renders (a collaborator's edit) stay still.
+  function settle() {
+    els.main.classList.remove('entering');
+    void els.main.offsetWidth;
+    els.main.classList.add('entering');
+    clearTimeout(settle.t);
+    settle.t = setTimeout(() => els.main.classList.remove('entering'), 400);
+  }
 
   // ---------- Theme (paper or night draft) ----------
   // index.html sets the starting theme before paint; this keeps the toggle and the system setting in sync.
   const ICONS = {
     moon: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>',
     sun: '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/></svg>',
   };
   const themeQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -314,7 +348,7 @@
     els.actions.innerHTML = `
       <button class="btn side-toggle" id="side-toggle" aria-label="Sections">☰<span class="lbl"> Sections</span></button>
       <span class="save-state" id="save-state"></span>
-      <button class="btn" id="jump-btn" title="Jump to (Ctrl+K)" aria-label="Jump to"><svg class="btn-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.5-4.5"/></svg><span class="lbl">Jump to…</span><kbd>${/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘K" : "Ctrl K"}</kbd></button>
+      <button class="btn" id="jump-btn" title="Jump to (Ctrl+K)" aria-label="Jump to"><svg class="btn-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m20 20-4.5-4.5"/></svg><span class="lbl">Jump to…</span><kbd>${KEYS.mod === '⌘' ? '⌘K' : 'Ctrl K'}</kbd></button>
       <button class="btn" id="share-btn" title="Share this bible with other people">Share</button>
       <div class="menu">
         <button class="btn primary" id="export-btn">Export ▾</button>
@@ -375,20 +409,7 @@
     els.crumbs.innerHTML = '';
     document.title = 'Series Bible';
     const bibles = await api('GET', '/api/bibles');
-    els.main.innerHTML = `
-      <div class="home">
-        <h1>Your series bibles</h1>
-        <p class="lede">Each bible starts with Characters and World sections. Add any other sections you need.</p>
-        <form class="new-bible" id="new-bible">
-          <input name="title" placeholder="Series title, e.g. The Lighthouse Keepers" required maxlength="200">
-          <input name="logline" placeholder="Logline (optional)" maxlength="500">
-          <button class="btn primary">Create bible</button>
-        </form>
-        <div class="bible-list">
-          ${bibles.length ? '' : '<p class="lede">No bibles yet. Create your first one above.</p>'}
-          ${bibles
-            .map(
-              (b) => `
+    const card = (b) => `
             <div class="bible-card">
               <a href="${link.bible(b.id)}"><span class="tp-kicker">Series Bible</span><h3>${esc(b.title)}</h3>
               ${b.logline ? `<p>${esc(b.logline)}</p>` : ''}
@@ -399,34 +420,118 @@
               }</span><span title="${esc(new Date(b.updatedAt).toLocaleString())}">Edited ${new Date(b.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span></small></a>
               ${
                 b.role === 'owner'
-                  ? `<button class="icon-btn" data-delete="${b.id}" data-title="${esc(b.title)}" title="Delete">🗑</button>`
+                  ? `<button class="icon-btn" data-delete="${b.id}" data-title="${esc(b.title)}" title="Delete" aria-label="Delete ${esc(b.title)}">${ICONS.trash}</button>`
                   : `<button class="icon-btn leave" data-leave="${b.id}" data-title="${esc(b.title)}" title="Stop seeing this shared bible">Leave</button>`
               }
-            </div>`
-            )
-            .join('')}
+            </div>`;
+    els.main.innerHTML = bibles.length
+      ? `
+      <div class="home">
+        <div class="home-head">
+          <div>
+            <h1>Your series bibles</h1>
+            <p class="lede">${bibles.length} ${bibles.length === 1 ? 'bible' : 'bibles'} on your shelf.</p>
+          </div>
+          <div class="home-actions">
+            ${bibles.some((b) => b.sample && b.role === 'owner') ? '' : '<button class="btn" data-sample>Open the sample bible</button>'}
+            <button class="btn primary" data-new-bible>＋ New bible</button>
+          </div>
         </div>
+        <div class="bible-list">
+          <button class="bible-card new-card" data-new-bible><span class="plus" aria-hidden="true">＋</span><span>New series bible</span></button>
+          ${bibles.map(card).join('')}
+        </div>
+      </div>`
+      : `
+      <div class="home">
+        <section class="welcome">
+          <div class="welcome-art" aria-hidden="true">
+            <div class="wa-page wa-back"></div>
+            <div class="wa-page wa-mid"></div>
+            <div class="wa-page wa-front"><span>Series Bible</span><b>YOUR SHOW</b><i>Written by you</i></div>
+            <span class="wa-tab" style="--tab: var(--tab-1); top: 22%"></span>
+            <span class="wa-tab" style="--tab: var(--tab-2); top: 38%"></span>
+            <span class="wa-tab" style="--tab: var(--tab-3); top: 54%"></span>
+          </div>
+          <div class="welcome-text">
+            <span class="eyebrow">Welcome${window.SBCollab.user ? `, ${esc(window.SBCollab.user.displayName || window.SBCollab.user.username)}` : ''}</span>
+            <h1>Every series starts with a bible.</h1>
+            <p>Keep your characters, world, episodes and tone in one binder. Link any page to any other, map who matters to whom, and export a pitch-ready PDF or Word file whenever you need one.</p>
+            <div class="welcome-actions">
+              <button class="btn primary big" data-new-bible>Start a new bible</button>
+              <button class="btn big" data-sample>Explore a sample bible</button>
+            </div>
+            <ul class="welcome-points">
+              <li><b>Templates</b> give every character, place and episode the right headings and a prompt for each.</li>
+              <li><b>§ Links</b> connect pages and headings, and every page shows what links to it.</li>
+              <li><b>History and trash</b> keep earlier versions, so nothing you write is lost.</li>
+            </ul>
+          </div>
+        </section>
       </div>`;
-    $('#new-bible').onsubmit = async (e) => {
-      e.preventDefault();
-      const fd = new FormData(e.target);
-      const b = await api('POST', '/api/bibles', { title: fd.get('title'), logline: fd.get('logline') });
-      location.hash = link.bible(b.id);
-    };
+    $$('[data-new-bible]').forEach((btn) => (btn.onclick = newBible));
+    $$('[data-sample]').forEach((btn) => {
+      btn.onclick = async () => {
+        btn.disabled = true;
+        try {
+          const b = await api('POST', '/api/bibles/sample');
+          location.hash = link.bible(b.id);
+          toast('Here is a sample bible to explore. Change anything, or delete it from the home screen.');
+        } catch (err) {
+          btn.disabled = false;
+          toast(`Could not open the sample: ${err.message}`);
+        }
+      };
+    });
     $$('[data-delete]').forEach((btn) => {
       btn.onclick = async () => {
-        if (!confirm(`Delete "${btn.dataset.title}" and everything in it? This cannot be undone.`)) return;
+        const ok = await SBDialog.confirm({
+          title: 'Delete this bible?',
+          message: `“${btn.dataset.title}” and every page, picture and earlier version in it will be deleted for good. This cannot be undone.`,
+          confirmLabel: 'Delete bible',
+          danger: true,
+        });
+        if (!ok) return;
         await api('DELETE', `/api/bibles/${btn.dataset.delete}`);
         renderHome();
+        toast(`Deleted “${btn.dataset.title}”.`);
       };
     });
     $$('[data-leave]').forEach((btn) => {
       btn.onclick = async () => {
-        if (!confirm(`Leave "${btn.dataset.title}"? You will lose access until the owner shares it again.`)) return;
+        const ok = await SBDialog.confirm({
+          title: 'Leave this bible?',
+          message: `You will stop seeing “${btn.dataset.title}” until its owner shares it with you again.`,
+          confirmLabel: 'Leave',
+          danger: true,
+        });
+        if (!ok) return;
         await window.SBCollab.leave(btn.dataset.leave);
         renderHome();
       };
     });
+  }
+
+  // Asks for a title and logline, then opens the new bible.
+  async function newBible() {
+    const fields = await SBDialog.form({
+      title: 'New series bible',
+      confirmLabel: 'Create bible',
+      body: `
+        <label class="ask-field"><span>Series title</span>
+          <input name="title" placeholder="e.g. The Lighthouse Keepers" maxlength="200" autocomplete="off" required></label>
+        <label class="ask-field"><span>Logline <small>optional</small></span>
+          <textarea name="logline" rows="3" placeholder="One or two sentences: who wants what, and what stands in the way." maxlength="2000"></textarea></label>
+        <p class="ask-hint">It starts with Characters and World sections. You can add Episodes, Season Arcs, Themes and more from the sidebar.</p>`,
+      read: (form) => (form.title.value.trim() ? { title: form.title.value.trim(), logline: form.logline.value.trim() } : undefined),
+    });
+    if (!fields) return;
+    try {
+      const b = await api('POST', '/api/bibles', fields);
+      location.hash = link.bible(b.id);
+    } catch (err) {
+      toast(`Could not create the bible: ${err.message}`);
+    }
   }
 
   // ---------- Sidebar ----------
@@ -460,7 +565,7 @@
                 (p) => `<li draggable="true" data-pid="${p.id}" class="${r.pid === p.id ? 'active' : ''}">
                   <a href="${link.page(b.id, p.id)}">${p.leadImage ? `<img class="page-thumb" src="${SBImages.thumb(b.id, p.leadImage)}" alt="" loading="lazy">` : ''}<span>${esc(p.title)}</span></a></li>`
               )
-              .join('') || `<li class="empty">${q ? 'No matches' : 'No pages yet'}</li>`}
+              .join('') || (q ? '<li class="empty">No matches</li>' : `<li class="empty"><button class="link-btn" data-add-page="${s.id}">＋ Add ${aOrAn(templateFor(s.kind).singular)}</button></li>`)}
           </ul>
         </div>`;
         })
@@ -545,14 +650,41 @@
 
   async function addPage(sid) {
     const section = state.bible.sections.find((s) => s.id === sid);
-    const singular = templateFor(section.kind).singular;
-    const title = prompt(`Name of the new ${singular} in ${section.name}:`);
-    if (!title || !title.trim()) return;
-    const page = await api('POST', `/api/bibles/${state.bible.id}/sections/${sid}/pages`, { title: title.trim() });
+    const tmpl = templateFor(section.kind);
+    const title = await SBDialog.prompt({
+      title: `New ${tmpl.singular}`,
+      label: tmpl.kind === 'characters' ? 'Character name' : 'Title',
+      placeholder: PLACEHOLDERS[tmpl.kind] || '',
+      hint: tmpl.headings.length
+        ? `Goes in ${section.name}, with headings for ${listOf(tmpl.headings.map((h) => h.title))}.`
+        : `Goes in ${section.name} as a blank page.`,
+      confirmLabel: `Add ${tmpl.singular}`,
+    });
+    if (!title) return;
+    let page;
+    try {
+      page = await api('POST', `/api/bibles/${state.bible.id}/sections/${sid}/pages`, { title });
+    } catch (err) {
+      return toast(`Could not add the page: ${err.message}`);
+    }
     section.pages.push(page);
     state.collapsed[sid] = false;
     location.hash = link.page(state.bible.id, page.id);
   }
+
+  const PLACEHOLDERS = {
+    characters: 'e.g. Mara Quill',
+    world: 'e.g. The Island',
+    episodes: 'e.g. 101 · Pilot',
+    seasons: 'e.g. Season One',
+    themes: 'e.g. Loyalty and ambition',
+    timeline: 'e.g. Before the series',
+    locations: 'e.g. The harbour pub',
+    tone: 'e.g. Look and feel',
+  };
+  const aOrAn = (word) => `${/^[aeiou]/i.test(word) ? 'an' : 'a'} ${word}`;
+  const listOf = (items) =>
+    items.length < 3 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 
   // Add-section dialog: pick a template, which also suggests the section name.
   function addSection() {
@@ -638,8 +770,9 @@
     els.main.innerHTML = `
       <div class="sheet overview">
         <span class="eyebrow">Series Bible</span>
-        <h1><input class="inline-edit" id="bible-title" value="${esc(b.title)}" maxlength="200" aria-label="Series title"></h1>
-        <textarea class="inline-edit logline" id="bible-logline" placeholder="Add a logline…" maxlength="2000">${esc(b.logline)}</textarea>
+        <h1><textarea class="inline-edit autosize" id="bible-title" rows="1" maxlength="200" aria-label="Series title">${esc(b.title)}</textarea></h1>
+        <textarea class="inline-edit logline autosize" id="bible-logline" rows="1" placeholder="Add a logline: who wants what, and what stands in the way…" maxlength="2000" aria-label="Logline">${esc(b.logline)}</textarea>
+        ${b.sections.some((s) => s.pages.length) ? '' : gettingStarted(b)}
         ${b.sections
           .map(
             (s) => `
@@ -649,14 +782,14 @@
               ${s.pages
                 .map(cardHtml)
                 .join('')}
-              <button class="card add" data-add-page="${s.id}">＋ Add to ${esc(s.name)}</button>
+              <button class="card add" data-add-page="${s.id}">＋ New ${esc(templateFor(s.kind).singular)}</button>
             </div>
           </div>`
           )
           .join('')}
       </div>`;
     const saveMeta = debounce(async () => {
-      const t = $('#bible-title').value.trim() || 'Untitled Series';
+      const t = oneLine($('#bible-title').value) || 'Untitled Series';
       const updated = await api('PATCH', `/api/bibles/${b.id}`, { title: t, logline: $('#bible-logline').value });
       b.title = updated.title;
       b.logline = updated.logline;
@@ -665,8 +798,44 @@
     }, 600);
     $('#bible-title').oninput = saveMeta;
     $('#bible-logline').oninput = saveMeta;
+    $('#bible-title').onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        $('#bible-logline').focus();
+      }
+    };
+    $$('.autosize', els.main).forEach(autosize);
     $$('[data-add-page]', els.main).forEach((btn) => (btn.onclick = () => addPage(btn.dataset.addPage)));
+    const gs = $('#gs-add-section');
+    if (gs) gs.onclick = addSection;
   }
+
+  // First steps for an empty bible. It goes away once the first page exists.
+  function gettingStarted(b) {
+    const chars = b.sections.find((s) => s.kind === 'characters') || b.sections[0];
+    return `
+        <div class="getting-started">
+          <h2>Getting started</h2>
+          <ol>
+            <li><b>Add your lead.</b> ${chars ? `<button class="link-btn" data-add-page="${chars.id}">Create the first ${esc(templateFor(chars.kind).singular)}</button>.` : ''} Each page starts with headings and a prompt under each, so you never face a blank sheet.</li>
+            <li><b>Link as you write.</b> Select a name and press <kbd>§ Link</kbd> (or ${KEYS.mod}+L) to link it to any page or heading. No page yet? The link dialog can create one.</li>
+            <li><b>Grow the binder.</b> <button class="link-btn" id="gs-add-section">Add a section</button> for episodes, season arcs, themes, locations or tone.</li>
+            <li><b>Share and export.</b> Invite a co-writer with Share, and export to PDF or Word when it is time to pitch.</li>
+          </ol>
+        </div>`;
+  }
+
+  // Lets a textarea grow with its text, so long titles and loglines wrap instead of scrolling.
+  function autosize(el) {
+    const fit = () => {
+      el.style.height = 'auto';
+      el.style.height = `${el.scrollHeight}px`;
+    };
+    el.addEventListener('input', fit);
+    el.fit = fit;
+    requestAnimationFrame(fit);
+  }
+  window.addEventListener('resize', debounce(() => $$('.autosize', els.main).forEach((el) => el.fit && el.fit()), 150));
 
   // ---------- Section ----------
   function renderSection(sid) {
@@ -682,8 +851,8 @@
     els.main.innerHTML = `
       <div class="sheet overview" style="${tab(s)}">
         <a class="eyebrow" href="${link.bible(b.id)}">${esc(b.title)}</a>
-        <h1><input class="inline-edit" id="section-name" value="${esc(s.name)}" maxlength="200" aria-label="Section name"></h1>
-        <div class="page-meta"><span>${s.pages.length} ${s.pages.length === 1 ? 'page' : 'pages'} · drag pages in the sidebar to reorder</span>
+        <h1><textarea class="inline-edit autosize" id="section-name" rows="1" maxlength="200" aria-label="Section name">${esc(s.name)}</textarea></h1>
+        <div class="page-meta"><span>${s.pages.length} ${s.pages.length === 1 ? 'page' : 'pages'}${s.pages.length > 1 ? ' · drag pages in the sidebar to reorder' : ''}</span>
           <span>
             <button class="btn small" id="sec-up" ${b.sections[0] === s ? 'disabled' : ''}>Move up</button>
             <button class="btn small" id="sec-down" ${b.sections[b.sections.length - 1] === s ? 'disabled' : ''}>Move down</button>
@@ -696,13 +865,26 @@
               .join('')}</select>
           </label>
         </div>
-        <div class="cards">
-          ${s.pages
-            .map(cardHtml)
-            .join('')}
-          <button class="card add" id="sec-add">＋ Add to ${esc(s.name)}</button>
-        </div>
+        ${
+          s.pages.length
+            ? `<div class="cards">
+          ${s.pages.map(cardHtml).join('')}
+          <button class="card add" id="sec-add">＋ New ${esc(templateFor(s.kind).singular)}</button>
+        </div>`
+            : `<div class="empty-state">
+          <p class="empty-title">Nothing in ${esc(s.name)} yet</p>
+          <p>${esc(templateFor(s.kind).description || 'Add the first page to this section.')}</p>
+          <button class="btn primary" id="sec-add">＋ Add ${esc(aOrAn(templateFor(s.kind).singular))}</button>
+        </div>`
+        }
       </div>`;
+    $$('.autosize', els.main).forEach(autosize);
+    $('#section-name').onkeydown = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.target.blur();
+      }
+    };
     $('#sec-add').onclick = () => addPage(s.id);
     $('#sec-kind').onchange = async (e) => {
       const kind = e.target.value;
@@ -711,7 +893,7 @@
       toast(`New pages in ${s.name} will use the ${templateFor(kind).name} template.`);
     };
     $('#section-name').oninput = debounce(async () => {
-      const name = $('#section-name').value.trim();
+      const name = oneLine($('#section-name').value);
       if (!name) return;
       await api('PATCH', `/api/bibles/${b.id}/sections/${s.id}`, { name });
       s.name = name;
@@ -730,7 +912,15 @@
     $('#sec-down').onclick = () => move(1);
     $('#sec-delete').onclick = async () => {
       const n = s.pages.length;
-      if (!confirm(`Delete the "${s.name}" section${n ? `? Its ${n} page${n === 1 ? '' : 's'} will go to the trash, where you can restore ${n === 1 ? 'it' : 'them'}.` : '?'}`)) return;
+      const ok = await SBDialog.confirm({
+        title: `Delete the ${s.name} section?`,
+        message: n
+          ? `Its ${n} page${n === 1 ? '' : 's'} will go to the trash, where you can restore ${n === 1 ? 'it' : 'them'} for 30 days.`
+          : 'It has no pages, so nothing else is affected.',
+        confirmLabel: 'Delete section',
+        danger: true,
+      });
+      if (!ok) return;
       await api('DELETE', `/api/bibles/${b.id}/sections/${s.id}`);
       b.sections = b.sections.filter((x) => x !== s);
       location.hash = link.bible(b.id);
@@ -828,17 +1018,20 @@
         <div class="page-head">
           <div class="page-head-text">
             <a class="eyebrow" href="${link.section(b.id, section.id)}">${esc(section.name)}</a>
-            <input class="page-title-input" id="page-title" value="${esc(page.title)}" maxlength="200" aria-label="Page title">
+            <textarea class="page-title-input autosize" id="page-title" rows="1" maxlength="200" aria-label="Page title">${esc(page.title)}</textarea>
           </div>
           <div class="lead-slot" id="lead-slot"></div>
         </div>
         <div class="page-meta">
-          <span>Tip: select text and press <b>§ Link</b> to link it to any section, page or heading.</span>
-          <span class="last-edit" id="last-edit">${page.updatedBy ? `Last edited by ${esc(page.updatedBy)}` : ''}</span>
-          <span class="word-count" id="word-count" aria-live="off"></span>
-          <button class="btn small" id="focus-btn" aria-pressed="false" title="Hide everything but the page (Ctrl+Shift+F)">Focus</button>
-          <button class="btn small" id="page-history" title="See and restore earlier versions of this page">History</button>
-          <button class="btn small danger" id="page-delete">Delete page</button>
+          <span class="meta-facts">
+            <span class="word-count" id="word-count" aria-live="off"></span>
+            <span class="last-edit" id="last-edit">${page.updatedBy ? `Last edited by ${esc(page.updatedBy)}` : ''}</span>
+          </span>
+          <span class="meta-actions">
+            <button class="btn small" id="focus-btn" aria-pressed="false" title="Hide everything but the page (${KEYS.mod}+Shift+F)">Focus</button>
+            <button class="btn small" id="page-history" title="See and restore earlier versions of this page">History</button>
+            <button class="btn small danger icon-only" id="page-delete" title="Move this page to the trash" aria-label="Move this page to the trash">${ICONS.trash}</button>
+          </span>
         </div>
         <div class="page-presence" id="page-presence" hidden></div>
         <div class="conflict" id="conflict" hidden></div>
@@ -918,8 +1111,9 @@
     }
 
     const titleInput = $('#page-title');
+    autosize(titleInput);
     titleInput.oninput = () => {
-      const t = titleInput.value.trim();
+      const t = oneLine(titleInput.value);
       if (!t) return;
       page.title = t;
       saver.queue(pid, { title: t });
@@ -951,13 +1145,33 @@
     $('#focus-exit').onclick = () => setFocusMode(false);
     setFocusMode(document.body.classList.contains('focus-mode'));
     $('#page-delete').onclick = async () => {
-      if (!confirm(`Move "${page.title}" to the trash? Links to it stop working until it is restored.`)) return;
+      const ok = await SBDialog.confirm({
+        title: 'Move this page to the trash?',
+        message: `“${page.title}” can be restored from the trash for 30 days. Links to it stop working until then.`,
+        confirmLabel: 'Move to trash',
+        danger: true,
+      });
+      if (!ok) return;
       await saver.flush();
       saver.pending = null;
       await api('DELETE', `/api/bibles/${b.id}/pages/${pid}`);
-      section.pages = section.pages.filter((p) => p.id !== pid);
-      location.hash = link.section(b.id, section.id);
-      toast(`Moved "${page.title}" to the trash.`);
+      // A collaborator refresh may have replaced the bible since this page opened, so look the page up again.
+      const now = findPage(pid);
+      if (now) now.section.pages = now.section.pages.filter((p) => p.id !== pid);
+      location.hash = link.section(b.id, now ? now.section.id : section.id);
+      toast(`Moved “${page.title}” to the trash.`, {
+        label: 'Undo',
+        run: async () => {
+          try {
+            await api('POST', `/api/bibles/${b.id}/trash/${pid}/restore`);
+            if (!state.bible || state.bible.id !== b.id) return;
+            state.bible = await api('GET', `/api/bibles/${b.id}`);
+            location.hash = link.page(b.id, pid);
+          } catch (err) {
+            toast(`Could not restore: ${err.message}`);
+          }
+        },
+      });
     };
     $('#page-history').onclick = () =>
       SBHistory.openHistory({
@@ -1110,7 +1324,7 @@
         ? range && range.length
           ? 'The selected text will become a link. ↑↓ to choose, Enter to insert. No page yet? Create one from the bottom of the list.'
           : 'No text selected: the name of what you pick will be inserted as a link.'
-        : '↑↓ to choose, Enter to open. Searches page text too. Press Ctrl+K anywhere to open this.';
+        : `↑↓ to choose, Enter to open. Searches page text too. ${KEYS.mod}+K opens this anywhere; ? lists every shortcut.`;
 
     function draw() {
       const raw = search.value.trim();
@@ -1208,7 +1422,41 @@
     };
   }
 
+  // The keyboard shortcuts sheet: press ? anywhere outside the text, or pick it from the account menu.
+  function showShortcuts() {
+    const m = KEYS.mod;
+    const row = (keys, what) => `<tr><td>${keys.map((k) => `<kbd>${esc(k)}</kbd>`).join(' ')}</td><td>${esc(what)}</td></tr>`;
+    SBDialog.info({
+      title: 'Keyboard shortcuts',
+      body: `
+        <table class="keys">
+          <tbody>
+            <tr><th colspan="2">Anywhere in a bible</th></tr>
+            ${row([m, 'K'], 'Jump to any section, page, heading or text')}
+            ${row(['?'], 'Show this list')}
+            <tr><th colspan="2">Writing a page</th></tr>
+            ${row([m, 'L'], 'Link the selected text to a page or heading')}
+            ${row([m, 'Shift', 'F'], 'Focus mode: hide everything but the page')}
+            ${row(['Esc'], 'Leave focus mode')}
+            ${row([m, 'B'], 'Bold')}
+            ${row([m, 'I'], 'Italic')}
+            ${row([m, 'U'], 'Underline')}
+            ${row([m, 'Z'], 'Undo')}
+            ${row([m, 'Shift', 'Z'], 'Redo')}
+            ${row(['Enter'], 'In the page title: start writing the page')}
+          </tbody>
+        </table>
+        <p class="ask-hint">Pictures can be pasted or dropped straight into a page. Drag pages in the sidebar to reorder them or move them to another section.</p>`,
+    });
+  }
+  window.SBApp = { showShortcuts };
+
   document.addEventListener('keydown', (e) => {
+    const typing = e.target.closest && e.target.closest('input, textarea, select, [contenteditable="true"]');
+    if (e.key === '?' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey && els.modal.hidden && !document.querySelector('.ask-modal')) {
+      e.preventDefault();
+      showShortcuts();
+    }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k' && state.bible) {
       e.preventDefault();
       if (els.modal.hidden) openPicker('jump');
@@ -1239,6 +1487,7 @@
     if (title && title.value !== page.title) {
       const caret = title.selectionStart;
       title.value = page.title;
+      if (title.fit) title.fit();
       if (document.activeElement === title) title.setSelectionRange(caret, caret);
     }
     const last = $('#last-edit');

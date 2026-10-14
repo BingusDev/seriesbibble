@@ -113,3 +113,21 @@ test('sections take a template, chosen or inferred from the name', async () => {
   const { body: tl } = await call('POST', `/api/bibles/${b.id}/sections/${misc.id}/pages`, { title: 'Year One' });
   assert.match(tl.content, /Before the Series/);
 });
+
+test('the sample bible is filled in, linked and marked as the sample', async () => {
+  const { status, body: b } = await call('POST', '/api/bibles/sample');
+  assert.strictEqual(status, 201);
+  const pages = b.sections.flatMap((s) => s.pages);
+  assert.ok(pages.length >= 5);
+  const ids = new Set(pages.map((p) => p.id));
+  const links = pages.flatMap((p) => [...p.content.matchAll(/href="#\/b\/([^/]+)\/p\/([^"]+)"/g)]);
+  assert.ok(links.length > 5, 'pages link to each other');
+  for (const [, bid, pid] of links) {
+    assert.strictEqual(bid, b.id);
+    assert.ok(ids.has(pid), 'every link points at a page in the sample');
+  }
+  assert.ok(!pages.some((p) => p.content.includes('[[')), 'no unresolved link markers');
+  assert.ok(b.relmap.relationships.every((r) => ids.has(r.from) && ids.has(r.to)));
+  const { body: list } = await call('GET', '/api/bibles');
+  assert.strictEqual(list.find((x) => x.id === b.id).sample, true);
+});
