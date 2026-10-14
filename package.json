@@ -1,0 +1,20 @@
+{
+  "name": "series-bible",
+  "version": "1.0.0",
+  "description": "A word processor for writing TV and film series bibles",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "author": "",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "express": "^5.3.0",
+    "html-to-docx": "^1.8.0",
+    "jszip": "^3.10.2",
+    "puppeteer-core": "^25.13.0",
+    "quill": "^2.0.3"
+  },
+  "private": true
+}

@@ -1,0 +1,12 @@
+services:
+  series-bible:
+    build: .
+    image: series-bible:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - bible-data:/data
+    restart: unless-stopped
+
+volumes:
+  bible-data:

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Series Bible</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%238a2c1d'/%3E%3Ctext x='16' y='23' font-family='Georgia' font-size='20' font-weight='bold' fill='white' text-anchor='middle'%3E§%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/vendor/quill/quill.snow.css">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/">Series Bible</a>
+    <nav class="crumbs" id="crumbs"></nav>
+    <div class="topbar-actions" id="topbar-actions"></div>
+  </header>
+
+  <div class="layout" id="layout">
+    <aside class="sidebar" id="sidebar" hidden></aside>
+    <main class="main" id="main"></main>
+    <aside class="rightbar" id="rightbar" hidden></aside>
+  </div>
+
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h2 id="modal-title"></h2>
+        <button class="icon-btn" data-close aria-label="Close">×</button>
+      </div>
+      <input class="modal-search" id="modal-search" type="search" placeholder="Search sections, pages and headings…" autocomplete="off">
+      <ul class="pick-list" id="modal-list"></ul>
+      <p class="modal-hint" id="modal-hint"></p>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="/vendor/quill/quill.js"></script>
+  <script src="/js/slug.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
