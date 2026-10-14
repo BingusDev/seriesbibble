@@ -975,15 +975,27 @@
   }, 150);
 
   // ---------- Picker (jump to / insert cross-reference) ----------
+  // Every section, page and heading, plus each page's text split into blocks that
+  // remember the heading above them, so a text match can jump straight to its heading.
   function pickerItems() {
     const b = state.bible;
     const items = [];
     for (const s of b.sections) {
       items.push({ kind: 'Section', label: s.name, where: `${s.pages.length} pages`, href: link.section(b.id, s.id) });
       for (const p of s.pages) {
-        items.push({ kind: 'Page', label: p.title, where: s.name, href: link.page(b.id, p.id) });
         const content = p.id === state.pageId && state.quill ? state.quill.root.innerHTML : p.content;
-        for (const h of headingsOf(content)) {
+        const doc = new DOMParser().parseFromString(content || '', 'text/html');
+        const heads = assignSlugs($$('h1, h2, h3', doc.body));
+        const slugOf = new Map(heads.map((h) => [h.el, h.slug]));
+        const blocks = [];
+        let slug = null;
+        for (const el of doc.body.children) {
+          if (slugOf.has(el)) { slug = slugOf.get(el); continue; }
+          const text = el.textContent.replace(/\s+/g, ' ').trim();
+          if (text) blocks.push({ text, slug });
+        }
+        items.push({ kind: 'Page', label: p.title, where: s.name, href: link.page(b.id, p.id), page: p, section: s, blocks });
+        for (const h of heads) {
           items.push({ kind: 'Heading', label: h.text, where: `${p.title}`, href: link.page(b.id, p.id, h.slug), heading: true });
         }
       }
@@ -991,42 +1003,111 @@
     return items;
   }
 
+  // Escapes text and wraps each occurrence of the search words in <mark>.
+  function highlight(text, words) {
+    const lower = text.toLowerCase();
+    const hits = [];
+    for (const w of words) {
+      for (let i = lower.indexOf(w); i > -1; i = lower.indexOf(w, i + w.length)) hits.push([i, i + w.length]);
+    }
+    hits.sort((a, b) => a[0] - b[0]);
+    let out = '';
+    let at = 0;
+    for (const [from, to] of hits) {
+      if (from < at) continue;
+      out += esc(text.slice(at, from)) + `<mark>${esc(text.slice(from, to))}</mark>`;
+      at = to;
+    }
+    return out + esc(text.slice(at));
+  }
+
+  // A page whose text holds every search word: a snippet around the first hit,
+  // linked to the heading above it.
+  function textMatch(item, words) {
+    const all = item.blocks.map((x) => x.text).join(' ').toLowerCase();
+    if (!words.every((w) => all.includes(w))) return null;
+    const block = item.blocks.find((x) => words.some((w) => x.text.toLowerCase().includes(w)));
+    const lower = block.text.toLowerCase();
+    const at = Math.min(...words.map((w) => lower.indexOf(w)).filter((i) => i > -1));
+    let from = Math.max(0, at - 50);
+    if (from > 0) from = block.text.indexOf(' ', from) + 1 || from;
+    let snip = block.text.slice(from, from + 140);
+    if (from + 140 < block.text.length) snip = snip.replace(/\s+\S*$/, '') + '…';
+    if (from > 0) snip = '…' + snip;
+    return {
+      kind: 'Text', label: item.label, where: item.where, snippet: highlight(snip, words),
+      href: block.slug ? link.page(state.bible.id, item.page.id, block.slug) : item.href,
+    };
+  }
+
   function openPicker(mode) {
     if (!state.bible) return;
     const quill = state.quill;
     if (mode === 'link' && !quill) return;
     const range = mode === 'link' ? quill.getSelection(true) : null;
+    const selected = range && range.length ? quill.getText(range.index, range.length).replace(/\s+/g, ' ').trim() : '';
     const all = pickerItems();
     const list = $('#modal-list');
     const search = $('#modal-search');
     let shown = [];
     let active = 0;
+    let busy = false;
 
     $('#modal-title').textContent = mode === 'link' ? 'Link to…' : 'Jump to…';
+    search.placeholder = mode === 'link' ? 'Search sections, pages and headings…' : 'Search titles and page text…';
     $('#modal-hint').textContent =
       mode === 'link'
         ? range && range.length
-          ? 'The selected text will become a link. ↑↓ to choose, Enter to insert.'
+          ? 'The selected text will become a link. ↑↓ to choose, Enter to insert. No page yet? Create one from the bottom of the list.'
           : 'No text selected: the name of what you pick will be inserted as a link.'
-        : '↑↓ to choose, Enter to open. Press Ctrl+K anywhere to open this.';
+        : '↑↓ to choose, Enter to open. Searches page text too. Press Ctrl+K anywhere to open this.';
 
     function draw() {
-      const q = search.value.trim().toLowerCase();
-      const words = q.split(/\s+/).filter(Boolean);
-      shown = all.filter((i) => words.every((w) => `${i.label} ${i.where}`.toLowerCase().includes(w))).slice(0, 200);
+      const raw = search.value.trim();
+      const words = raw.toLowerCase().split(/\s+/).filter(Boolean);
+      const titled = all.filter((i) => words.every((w) => `${i.label} ${i.where}`.toLowerCase().includes(w)));
+      shown = titled.slice(0, 200);
+      if (mode === 'jump' && words.length) {
+        // Pages already listed by title still show a text hit if their body matches too.
+        shown = shown.concat(all.filter((i) => i.blocks).map((i) => textMatch(i, words)).filter(Boolean).slice(0, 50));
+      }
+      if (mode === 'link' && raw && !all.some((i) => i.kind === 'Page' && i.label.trim().toLowerCase() === raw.toLowerCase())) {
+        for (const s of state.bible.sections) {
+          shown.push({ kind: 'New', label: raw.slice(0, 200), where: `New ${templateFor(s.kind).singular} in ${s.name}`, create: s });
+        }
+      }
       active = Math.min(active, Math.max(shown.length - 1, 0));
       list.innerHTML =
         shown
           .map(
-            (i, n) => `<li data-n="${n}" class="${i.heading ? 'heading' : ''} ${n === active ? 'active' : ''}">
-              <span class="kind">${i.kind}</span><span class="label">${esc(i.label)}</span><span class="where">${esc(i.where)}</span></li>`
+            (i, n) => `<li data-n="${n}" class="${i.heading ? 'heading' : ''} ${i.create ? 'create' : ''} ${n === active ? 'active' : ''}">
+              <span class="kind">${i.kind}</span><span class="label">${i.create ? `Create “${esc(i.label)}”` : esc(i.label)}${
+                i.snippet ? `<span class="snippet">${i.snippet}</span>` : ''
+              }</span><span class="where">${esc(i.where)}</span></li>`
           )
           .join('') || '<li>No matches</li>';
       const el = $('li.active', list);
       if (el) el.scrollIntoView({ block: 'nearest' });
     }
 
-    function choose(item) {
+    // Makes the page in the chosen section, then links to it like any other item.
+    async function create(item) {
+      if (busy) return;
+      busy = true;
+      try {
+        const s = item.create;
+        const page = await api('POST', `/api/bibles/${state.bible.id}/sections/${s.id}/pages`, { title: item.label });
+        s.pages.push(page);
+        renderSidebar();
+        choose({ kind: 'Page', label: page.title, href: link.page(state.bible.id, page.id) }, `Created “${page.title}” in ${s.name} and linked to it`);
+      } catch (err) {
+        busy = false;
+        toast(`Could not create the page: ${err.message}`);
+      }
+    }
+
+    function choose(item, message) {
+      if (item && item.create) return create(item);
       close();
       if (!item) return;
       if (mode === 'jump') {
@@ -1042,7 +1123,7 @@
         quill.setSelection(at + item.label.length, 0, 'silent');
         quill.format('link', false, 'silent');
       }
-      toast(`Linked to ${item.kind.toLowerCase()} “${item.label}”`);
+      toast(message || `Linked to ${item.kind.toLowerCase()} “${item.label}”`);
     }
 
     function close() {
@@ -1051,11 +1132,13 @@
       if (mode === 'link' && quill) quill.focus();
     }
 
-    search.value = '';
+    // Linking selected text starts from that text, so a missing page is one Enter away from the create row.
+    search.value = selected.length <= 200 ? selected : '';
     active = 0;
     draw();
     els.modal.hidden = false;
     search.focus();
+    search.select();
     search.oninput = () => {
       active = 0;
       draw();
