@@ -53,6 +53,7 @@
     bible: (bid) => `#/b/${bid}`,
     section: (bid, sid) => `#/b/${bid}/s/${sid}`,
     page: (bid, pid, slug) => `#/b/${bid}/p/${pid}` + (slug ? `/h/${encodeURIComponent(slug)}` : ''),
+    map: (bid) => `#/b/${bid}/map`,
   };
 
   function findPage(pid) {
@@ -140,6 +141,7 @@
     const r = { bid: parts[1], name: 'bible' };
     if (parts[2] === 's' && parts[3]) Object.assign(r, { name: 'section', sid: parts[3] });
     if (parts[2] === 'p' && parts[3]) Object.assign(r, { name: 'page', pid: parts[3] });
+    if (parts[2] === 'map') r.name = 'map';
     if (r.name === 'page' && parts[4] === 'h' && parts[5]) r.slug = decodeURIComponent(parts[5]);
     return r;
   }
@@ -176,6 +178,10 @@
       return renderPage(r.pid, r.slug);
     }
     if (r.name === 'section') return renderSection(r.sid);
+    if (r.name === 'map') {
+      teardownEditor();
+      return RelMap.render(relCtx());
+    }
     return renderOverview();
   }
   window.addEventListener('hashchange', route);
@@ -190,6 +196,7 @@
       const s = b.sections.find((x) => x.id === r.sid);
       if (s) bits.push(`<span>${esc(s.name)}</span>`);
     }
+    if (b && r.name === 'map') bits.push('<span>Relationship map</span>');
     if (b && r.name === 'page') {
       const f = findPage(r.pid);
       if (f) {
@@ -314,6 +321,7 @@
       <div class="side-head">
         <a class="side-title" href="${link.bible(b.id)}">${esc(b.title)}</a>
         <input class="side-filter" id="side-filter" type="search" placeholder="Filter pages…" value="${esc(state.filter)}">
+        <a class="side-map ${r.name === 'map' ? 'active' : ''}" href="${link.map(b.id)}">◎ Relationship map</a>
       </div>
       ${b.sections
         .map((s) => {
@@ -684,7 +692,9 @@
       <h3>On this page</h3>
       <ul>${heads.map((h) => `<li class="h${h.level}"><a href="${link.page(b.id, pid, h.slug)}">${esc(h.text)}</a></li>`).join('') || '<li class="none">Add headings to build an outline.</li>'}</ul>
       <h3>Linked from</h3>
-      <ul>${back.map(({ s, p }) => `<li><a href="${link.page(b.id, p.id)}">${esc(p.title)}<small>${esc(s.name)}</small></a></li>`).join('') || '<li class="none">No other pages link here yet.</li>'}</ul>`;
+      <ul>${back.map(({ s, p }) => `<li><a href="${link.page(b.id, p.id)}">${esc(p.title)}<small>${esc(s.name)}</small></a></li>`).join('') || '<li class="none">No other pages link here yet.</li>'}</ul>
+      ${RelMap.panel(relCtx(), pid)}`;
+    RelMap.wirePanel(relCtx(), els.rightbar, renderOutline);
   }, 150);
 
   // ---------- Picker (jump to / insert cross-reference) ----------
@@ -794,6 +804,11 @@
       if (els.modal.hidden) openPicker('jump');
     }
   });
+
+  // What the relationship map (relmap.js) needs from the app.
+  function relCtx() {
+    return { bible: state.bible, main: els.main, rightbar: els.rightbar, api, esc, link, toast };
+  }
 
   function debounce(fn, ms) {
     let t;

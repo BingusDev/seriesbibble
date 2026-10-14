@@ -6,6 +6,7 @@ An application designed to help you keep your Series Bible organized when writin
 - **Pages** inside each section, with starter templates for characters and world entries. Drag pages in the sidebar to reorder them or move them between sections.
 - **Navigation**: sidebar with collapsible, labeled sections and a filter box; breadcrumbs; an "On this page" outline; and **Jump to…** (Ctrl/Cmd+K) to search every section, page and heading.
 - **Cross-reference links**: select text and press **§ Link** (Ctrl/Cmd+L) to link to any section, page, or heading on the same or another page. Clicking the link jumps straight there, and each page shows which pages link to it ("Linked from").
+- **Relationship map**: connect characters with labeled relationships (sibling, mentor of, rival…), colored by kind and one-way or mutual. The map is an interactive graph: drag characters to arrange it, click one to open their page, click a line to edit it. Each character page lists its relationships in the right bar.
 - **Export** to PDF and Word (.docx) with a title page and table of contents. Cross-reference links stay clickable in both. A JSON backup export is also available.
 - Autosaves as you type. Everything is stored as JSON files in the data volume, with no external services.
 

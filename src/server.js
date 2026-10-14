@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const store = require('./store');
 const { toDocx, toPdf } = require('./export');
+const relationships = require('./relationships');
 
 const app = express();
 app.use(express.json({ limit: '25mb' }));
@@ -105,6 +106,9 @@ app.delete('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
   store.write(bible);
   res.status(204).end();
 }));
+
+// Character relationship map
+app.use(relationships.router);
 
 // Exports
 const fileName = (bible, ext) => `${(bible.title || 'series-bible').replace(/[^\w\- ]+/g, '').trim() || 'series-bible'}.${ext}`;
