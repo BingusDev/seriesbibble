@@ -14,7 +14,11 @@
       document.documentElement.dataset.theme = dark ? 'dark' : 'light';
     })();
   </script>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%238a2c1d'/%3E%3Ctext x='16' y='23' font-family='Georgia' font-size='20' font-weight='bold' fill='white' text-anchor='middle'%3E§%3C/text%3E%3C/svg%3E">
+  <meta name="description" content="A word processor for writing TV and film series bibles.">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
   <link rel="stylesheet" href="/vendor/quill/quill.snow.css">
   <link rel="stylesheet" href="/css/app.css">
   <link rel="stylesheet" href="/css/relmap.css">
@@ -31,7 +35,7 @@
 
   <div class="layout" id="layout">
     <aside class="sidebar" id="sidebar" hidden></aside>
-    <main class="main" id="main"></main>
+    <main class="main" id="main"><div class="loading" aria-live="polite"><span class="brand-mark" aria-hidden="true">§</span><span>Opening your binder…</span></div></main>
     <aside class="rightbar" id="rightbar" hidden></aside>
   </div>
 
@@ -51,6 +55,7 @@
 
   <script src="/vendor/quill/quill.js"></script>
   <script src="/js/slug.js"></script>
+  <script src="/js/dialog.js"></script>
   <script src="/js/collab.js"></script>
   <script src="/js/images.js"></script>
   <script src="/js/relmap.js"></script>

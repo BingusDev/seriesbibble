@@ -174,6 +174,7 @@ function summaryFor(user, b) {
     role: isOwner(user, b) ? 'owner' : 'editor',
     owner,
     collaboratorCount: (b.collaborators || []).length,
+    sample: !!b.sample,
   };
 }
 

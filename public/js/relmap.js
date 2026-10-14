@@ -273,7 +273,14 @@
       btn.onclick = () => { hidden[btn.dataset.type] = !hidden[btn.dataset.type]; refresh(); };
     });
     main.querySelector('#rm-tidy').onclick = async () => {
-      if (Object.keys(map.positions).length && !confirm('Forget where you placed the characters and lay the map out again?')) return;
+      if (
+        Object.keys(map.positions).length &&
+        !(await SBDialog.confirm({
+          title: 'Re-arrange the map?',
+          message: 'This forgets where you placed the characters and lays the map out again.',
+          confirmLabel: 'Re-arrange',
+        }))
+      ) return;
       map.positions = (await api('PUT', `/api/bibles/${b.id}/relmap/positions`, { reset: true })).positions;
       refresh();
     };

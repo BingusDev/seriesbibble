@@ -7,6 +7,7 @@ const relationships = require('./relationships');
 const collab = require('./collab');
 const history = require('./history');
 const images = require('./images');
+const { createSample } = require('./sample');
 
 const app = express();
 // Only proxies named in TRUST_PROXY may set X-Forwarded-For/-Proto (Express syntax,
@@ -46,6 +47,11 @@ app.get('/api/bibles', (req, res) => {
 
 app.post('/api/bibles', (req, res) => {
   res.status(201).json(store.create({ title: str(req.body.title), logline: str(req.body.logline, 2000), ownerId: req.user.id }));
+});
+
+// A filled-in example bible, so a new writer can see what one looks like before starting their own.
+app.post('/api/bibles/sample', (req, res) => {
+  res.status(201).json(createSample(req.user.id));
 });
 
 app.get('/api/bibles/:id', withBible((req, res, bible) => res.json(bible)));

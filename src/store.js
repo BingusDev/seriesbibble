@@ -39,7 +39,7 @@ function list() {
       const b = JSON.parse(fs.readFileSync(path.join(BIBLE_DIR, f), 'utf8'));
       return {
         id: b.id, title: b.title, logline: b.logline, updatedAt: b.updatedAt,
-        ownerId: b.ownerId, collaborators: b.collaborators || [],
+        ownerId: b.ownerId, collaborators: b.collaborators || [], sample: !!b.sample,
       };
     })
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));

@@ -210,7 +210,13 @@
     $$('[data-purge]', sheet).forEach((btn) => {
       btn.onclick = async () => {
         const title = btn.closest('li').querySelector('strong').textContent;
-        if (!confirm(`Delete "${title}" for good? It and its history cannot be brought back.`)) return;
+        const ok = await SBDialog.confirm({
+          title: 'Delete this page for good?',
+          message: `“${title}” and its earlier versions cannot be brought back.`,
+          confirmLabel: 'Delete for good',
+          danger: true,
+        });
+        if (!ok) return;
         try {
           await api('DELETE', `/api/bibles/${b.id}/trash/${btn.dataset.purge}`);
           renderTrash(ctx);
@@ -222,7 +228,13 @@
     const empty = $('#trash-empty', sheet);
     if (empty) {
       empty.onclick = async () => {
-        if (!confirm(`Delete all ${items.length} page${items.length === 1 ? '' : 's'} in the trash for good? This cannot be undone.`)) return;
+        const ok = await SBDialog.confirm({
+          title: 'Empty the trash?',
+          message: `The ${items.length === 1 ? 'page' : `${items.length} pages`} in the trash will be deleted for good. This cannot be undone.`,
+          confirmLabel: 'Empty trash',
+          danger: true,
+        });
+        if (!ok) return;
         try {
           await api('DELETE', `/api/bibles/${b.id}/trash`);
           renderTrash(ctx);

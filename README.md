@@ -2,6 +2,7 @@
 
 An application designed to help you keep your Series Bible organized when writing a screenplay: a web-based word processor for TV and film series bibles.
 
+- **Getting started**: a new account lands on a welcome screen that can open **Low Tide**, a filled-in sample bible with linked pages and a relationship map (`src/sample.js`). An empty bible shows a short getting-started list until its first page exists. Press **?** anywhere (or pick **Keyboard shortcuts** from the account menu) for every shortcut. Deleting a page shows **Undo** for a few seconds.
 - **Sections**: every bible starts with **Characters** and **World**; add any others you need (Episodes, Themes, Tone & Style…). Rename, reorder or delete them from the section page.
 - **Section templates**: when you add a section, pick a template (Episodes, Season Arcs, Themes, Timeline, Locations, Tone & Style, or Blank). Each new page starts with that template's headings, and a **Writing prompts** panel above the editor says what to put under each one. Prompts are never saved into the page, so they stay out of exports. Change a section's template from its section page. Templates live in `src/templates.js`.
 - **Pages** inside each section. Drag pages in the sidebar to reorder them or move them between sections.
