@@ -70,9 +70,9 @@ test('unknown types fall back to other, and deleted pages drop their relationshi
   assert.strictEqual(rel.mutual, true);
   await call('PUT', `/api/bibles/${b.id}/relmap/positions`, { positions: { [ben.id]: { x: 10.4, y: -3 } } });
   await call('DELETE', `/api/bibles/${b.id}/pages/${ben.id}`);
-  const { body: map } = await call('GET', `/api/bibles/${b.id}/relmap`);
-  assert.strictEqual(map.relationships.length, 0);
-  assert.deepStrictEqual(map.positions, {});
+  const { body: full } = await call('GET', `/api/bibles/${b.id}`);
+  assert.strictEqual(full.relmap.relationships.length, 0, 'deleting a page cleans up the saved file');
+  assert.deepStrictEqual(full.relmap.positions, {});
 });
 
 test('map positions are saved, rounded, and can be reset', async () => {
@@ -83,4 +83,13 @@ test('map positions are saved, rounded, and can be reset', async () => {
   assert.deepStrictEqual(map.positions, { [ana.id]: { x: 13, y: 40 } });
   ({ body: map } = await call('PUT', `/api/bibles/${b.id}/relmap/positions`, { reset: true }));
   assert.deepStrictEqual(map.positions, {});
+});
+
+test('deleting a section drops relationships to its pages', async () => {
+  const { b, pages: [ana] } = await bibleWithCharacters('Ana');
+  const { body: place } = await call('POST', `/api/bibles/${b.id}/sections/${b.sections[1].id}/pages`, { title: 'Harbor' });
+  await call('POST', `/api/bibles/${b.id}/relationships`, { from: ana.id, to: place.id, label: 'lives at' });
+  await call('DELETE', `/api/bibles/${b.id}/sections/${b.sections[1].id}`);
+  const { body: full } = await call('GET', `/api/bibles/${b.id}`);
+  assert.strictEqual(full.relmap.relationships.length, 0);
 });

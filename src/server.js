@@ -64,6 +64,7 @@ app.patch('/api/bibles/:id/sections/:sid', withBible((req, res, bible) => {
 
 app.delete('/api/bibles/:id/sections/:sid', withBible((req, res, bible) => {
   bible.sections = bible.sections.filter((s) => s.id !== req.params.sid);
+  relationships.prune(bible);
   store.write(bible);
   res.status(204).end();
 }));
@@ -103,6 +104,7 @@ app.patch('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
 
 app.delete('/api/bibles/:id/pages/:pid', withBible((req, res, bible) => {
   for (const s of bible.sections) s.pages = s.pages.filter((p) => p.id !== req.params.pid);
+  relationships.prune(bible);
   store.write(bible);
   res.status(204).end();
 }));
